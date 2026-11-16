@@ -152,11 +152,12 @@ export function renderCard(
     }).modules;
     const size = qr.size,
       dot = 150 / size;
+    const qrY = 694;
     let qrDots = "";
     for (let y = 0; y < size; y++)
       for (let x = 0; x < size; x++)
         if (qr.get(x, y))
-          qrDots += `<rect x="${446 + x * dot}" y="${695 + y * dot}" width="${dot + 0.08}" height="${dot + 0.08}"/>`;
+          qrDots += `<rect x="${446 + x * dot}" y="${qrY + 15 + y * dot}" width="${dot + 0.08}" height="${dot + 0.08}"/>`;
     const photo = recipe.imageDataUrl
       ? `<image href="${esc(recipe.imageDataUrl)}" x="0" y="0" width="${profile.widthUnits}" height="${profile.heightUnits}" preserveAspectRatio="xMidYMid slice"/>`
       : "";
@@ -204,7 +205,7 @@ export function renderCard(
         : variant === "fade"
           ? '<rect x="28" y="590" width="425" height="310" fill="url(#textFade)"/>'
           : "";
-    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="680" width="172" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></g></g></svg>`;
+    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></g></g></svg>`;
   }
   const lines = recipe.ingredients || [];
   const rowHeight = lines.length > 10 ? 31 : 37;
