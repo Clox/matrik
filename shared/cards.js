@@ -10,6 +10,23 @@ export const CARD = {
   widthPx: 815,
   heightPx: 1110,
 };
+export const FRONT_STYLES = [
+  {
+    id: "panel",
+    label: "Semitransparent panel",
+    description: "Lugn mörk yta bakom texten",
+  },
+  {
+    id: "direct",
+    label: "Text på bilden",
+    description: "Bild ända fram till bokstäverna",
+  },
+  {
+    id: "fade",
+    label: "Svag lokal toning",
+    description: "Mjuk toning bara bakom texten",
+  },
+];
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -97,7 +114,7 @@ export function validateCard(recipe) {
 }
 const svgStart =
   '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="69mm" height="94mm" viewBox="0 0 690 940">';
-export function renderCard(recipe, side) {
+export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
   const id = esc(recipe.id || "");
   const title = esc(recipe.shortName || recipe.name || "Namnlös rätt");
   if (side === "front") {
@@ -114,6 +131,9 @@ export function renderCard(recipe, side) {
     const photo = recipe.imageDataUrl
       ? `<image href="${esc(recipe.imageDataUrl)}" x="0" y="0" width="690" height="940" preserveAspectRatio="xMidYMid slice"/>`
       : "";
+    const variant = FRONT_STYLES.some((style) => style.id === frontStyle)
+      ? frontStyle
+      : "panel";
     const titleLines = wrap(
       recipe.shortName || recipe.name || "Namnlös rätt",
       15,
@@ -121,10 +141,20 @@ export function renderCard(recipe, side) {
       .slice(0, 2)
       .map(
         (line, i) =>
-          `<text x="60" y="${710 + i * 55}" fill="white" font-family="sans-serif" font-size="43" font-weight="700">${esc(line)}</text>`,
+          `<text x="66" y="${i === 0 ? 728 : 782}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : ""}>${esc(line)}</text>`,
       )
       .join("");
-    return `${svgStart}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><linearGradient id="fade" x2="0" y2="1"><stop stop-color="#17251b" stop-opacity="0"/><stop offset="1" stop-color="#17251b" stop-opacity=".9"/></linearGradient></defs><rect width="690" height="940" fill="url(#bg)"/>${photo}<rect width="690" height="940" fill="url(#fade)"/><text x="60" y="655" fill="white" font-family="sans-serif" font-size="22" letter-spacing="5">MATRIKA · ${id}</text>${titleLines}<rect x="445" y="705" width="180" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g><text x="60" y="861" fill="white" font-family="sans-serif" font-size="19">${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text></svg>`;
+    const textOutline =
+      variant === "direct"
+        ? 'stroke="#17251b" stroke-opacity=".7" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill"'
+        : "";
+    const textBackground =
+      variant === "panel"
+        ? '<rect x="44" y="612" width="384" height="274" rx="16" fill="#14221a" fill-opacity=".54"/>'
+        : variant === "fade"
+          ? '<rect x="28" y="590" width="425" height="310" fill="url(#textFade)"/>'
+          : "";
+    return `${svgStart}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="690" height="940" fill="url(#bg)"/>${photo}${textBackground}<text x="66" y="660" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="850" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="445" y="705" width="180" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></svg>`;
   }
   const lines = recipe.ingredients || [];
   const rowHeight = lines.length > 10 ? 31 : 37;
@@ -153,5 +183,5 @@ export function renderCard(recipe, side) {
         `<text x="60" y="${instructionY + 36 + i * 25}" font-size="19">${esc(line)}</text>`,
     )
     .join("");
-  return `${svgStart}<rect width="690" height="940" fill="#f9f7f0"/><rect x="30" y="30" width="630" height="880" fill="none" stroke="#e3ded1" stroke-width="2"/><text x="60" y="100" font-family="sans-serif" font-size="20" letter-spacing="4" fill="#657261">MATRIKA · ${id}</text><text x="60" y="156" font-family="sans-serif" font-size="${title.length > 22 ? 33 : 43}" font-weight="700" fill="#1e3327">${title}</text><text x="60" y="197" font-family="sans-serif" font-size="17" fill="#657261">${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv` : "")} ${esc(recipe.totalTime ? `· ${recipe.totalTime} min totalt` : "")}</text><line x1="55" y1="208" x2="635" y2="208" stroke="#b9c3b6"/><g font-family="sans-serif" fill="#243a2b"><text x="66" y="232" font-size="14" fill="#657261">INGREDIENSER</text><text x="424" y="232" text-anchor="end" font-size="16">4</text><text x="500" y="232" text-anchor="end" font-size="16">6</text><text x="576" y="232" text-anchor="end" font-size="16">8</text>${rows}<text x="60" y="${instructionY}" font-size="20" font-weight="700">GÖR SÅ HÄR</text>${instructions}</g></svg>`;
+  return `${svgStart}<rect width="690" height="940" fill="#f9f7f0"/><rect x="30" y="30" width="630" height="880" fill="none" stroke="#e3ded1" stroke-width="2"/><text x="60" y="100" font-family="sans-serif" font-size="20" letter-spacing="4" fill="#657261">MATRIK · ${id}</text><text x="60" y="156" font-family="sans-serif" font-size="${title.length > 22 ? 33 : 43}" font-weight="700" fill="#1e3327">${title}</text><text x="60" y="197" font-family="sans-serif" font-size="17" fill="#657261">${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv` : "")} ${esc(recipe.totalTime ? `· ${recipe.totalTime} min totalt` : "")}</text><line x1="55" y1="208" x2="635" y2="208" stroke="#b9c3b6"/><g font-family="sans-serif" fill="#243a2b"><text x="66" y="232" font-size="14" fill="#657261">INGREDIENSER</text><text x="424" y="232" text-anchor="end" font-size="16">4</text><text x="500" y="232" text-anchor="end" font-size="16">6</text><text x="576" y="232" text-anchor="end" font-size="16">8</text>${rows}<text x="60" y="${instructionY}" font-size="20" font-weight="700">GÖR SÅ HÄR</text>${instructions}</g></svg>`;
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { renderCard, validateCard } from "../shared/cards.js";
+import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
 import "./style.css";
 
 async function json(url, options = {}) {
@@ -14,15 +14,15 @@ function fileName(response) {
   return (
     response.headers
       .get("content-disposition")
-      ?.match(/filename="([^"]+)"/)?.[1] || "matrika-export"
+      ?.match(/filename="([^"]+)"/)?.[1] || "matrik-export"
   );
 }
-async function download(url, recipe, csrf) {
+async function download(url, recipe, csrf, frontStyle) {
   const { imageDataUrl, ...payload } = recipe;
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-matrika-csrf": csrf },
-    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json", "x-matrik-csrf": csrf },
+    body: JSON.stringify({ ...payload, frontStyle }),
   });
   if (!response.ok)
     throw new Error(
@@ -43,16 +43,23 @@ function toDataUrl(blob) {
     reader.readAsDataURL(blob);
   });
 }
-function Preview({ recipe }) {
+function Preview({ recipe, frontStyle, onFrontStyleChange }) {
   const issues = useMemo(() => validateCard(recipe), [recipe]);
   const cards = useMemo(
     () => ({
-      front: renderCard(recipe, "front"),
+      front: Object.fromEntries(
+        FRONT_STYLES.map((style) => [
+          style.id,
+          renderCard(recipe, "front", { frontStyle: style.id }),
+        ]),
+      ),
       back: renderCard(recipe, "back"),
     }),
     [recipe],
   );
   const [expandedSide, setExpandedSide] = useState(null);
+  const visibleCard =
+    expandedSide === "front" ? cards.front[frontStyle] : cards.back;
   const dialogRef = useRef(null);
   const closeRef = useRef(null);
   useEffect(() => {
@@ -102,7 +109,7 @@ function Preview({ recipe }) {
           >
             <span
               className="card"
-              dangerouslySetInnerHTML={{ __html: cards.front }}
+              dangerouslySetInnerHTML={{ __html: cards.front[frontStyle] }}
             />
           </button>
           <p>Framsida</p>
@@ -120,6 +127,30 @@ function Preview({ recipe }) {
             />
           </button>
           <p>Baksida · 4 / 6 / 8 portioner</p>
+        </div>
+      </div>
+      <div className="front-compare">
+        <div className="front-compare-heading">
+          <strong>Jämför framsidor</strong>
+          <span>Vald variant används i PNG och PDF</span>
+        </div>
+        <div className="front-compare-options">
+          {FRONT_STYLES.map((style) => (
+            <button
+              type="button"
+              className={`front-compare-option ${frontStyle === style.id ? "selected" : ""}`}
+              key={style.id}
+              aria-pressed={frontStyle === style.id}
+              onClick={() => onFrontStyleChange(style.id)}
+            >
+              <span
+                className="front-compare-thumb"
+                dangerouslySetInnerHTML={{ __html: cards.front[style.id] }}
+              />
+              <strong>{style.label}</strong>
+              <small>{style.description}</small>
+            </button>
+          ))}
         </div>
       </div>
       {expandedSide &&
@@ -173,9 +204,27 @@ function Preview({ recipe }) {
                   Baksida
                 </button>
               </div>
+              {expandedSide === "front" && (
+                <div
+                  className="card-dialog-styles"
+                  aria-label="Välj framsidesvariant"
+                >
+                  {FRONT_STYLES.map((style) => (
+                    <button
+                      type="button"
+                      key={style.id}
+                      className={frontStyle === style.id ? "selected" : ""}
+                      aria-pressed={frontStyle === style.id}
+                      onClick={() => onFrontStyleChange(style.id)}
+                    >
+                      {style.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div
                 className="card-dialog-image"
-                dangerouslySetInnerHTML={{ __html: cards[expandedSide] }}
+                dangerouslySetInnerHTML={{ __html: visibleCard }}
               />
             </div>
           </div>,
@@ -504,6 +553,19 @@ function App() {
     [tagFilter, setTagFilter] = useState(""),
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false);
+  const [frontStyle, setFrontStyle] = useState(() => {
+    try {
+      const saved = localStorage.getItem("matrik.frontStyle");
+      return FRONT_STYLES.some((style) => style.id === saved) ? saved : "panel";
+    } catch {
+      return "panel";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("matrik.frontStyle", frontStyle);
+    } catch {}
+  }, [frontStyle]);
   const load = async () => {
     const state = await json("/api/status");
     setStatus(state);
@@ -566,7 +628,7 @@ function App() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-matrika-csrf": status.csrf,
+          "x-matrik-csrf": status.csrf,
         },
         body: JSON.stringify(payload),
       });
@@ -586,7 +648,7 @@ function App() {
       form.append("image", file);
       const result = await json(`/api/recipes/${draft.id}/image`, {
         method: "POST",
-        headers: { "x-matrika-csrf": status.csrf },
+        headers: { "x-matrik-csrf": status.csrf },
         body: form,
       });
       const data = await toDataUrl(file);
@@ -601,12 +663,12 @@ function App() {
   const exportFile = async (target) => {
     setMessage("");
     try {
-      await download(target, draft, status.csrf);
+      await download(target, draft, status.csrf, frontStyle);
     } catch (error) {
       setMessage(error.message);
     }
   };
-  if (!status) return <div className="loading">Öppnar Matrika…</div>;
+  if (!status) return <div className="loading">Öppnar Matrik…</div>;
   if (!status.configured || !status.authenticated)
     return (
       <div className="welcome">
@@ -614,7 +676,7 @@ function App() {
           M<span>✳</span>
         </div>
         <p className="eyebrow">Familjens receptregister</p>
-        <h1>Matrika</h1>
+        <h1>Matrik</h1>
         <p>
           Samla recepten från Google Sheets och skapa färdiga matkort direkt i
           webbläsaren.
@@ -655,7 +717,7 @@ function App() {
       <aside className="sidebar">
         <div className="logo">
           M<span>✳</span>
-          <small>Matrika</small>
+          <small>Matrik</small>
         </div>
         <div className="list-header">
           <p className="eyebrow">Receptregister</p>
@@ -715,7 +777,7 @@ function App() {
             onClick={async () => {
               await json("/auth/logout", {
                 method: "POST",
-                headers: { "x-matrika-csrf": status.csrf },
+                headers: { "x-matrik-csrf": status.csrf },
               });
               location.reload();
             }}
@@ -861,7 +923,11 @@ function App() {
                 />
               </div>
               <div className="right">
-                <Preview recipe={preview || draft} />
+                <Preview
+                  recipe={preview || draft}
+                  frontStyle={frontStyle}
+                  onFrontStyleChange={setFrontStyle}
+                />
                 <div className="export-panel">
                   <p className="eyebrow">Exportera vid behov</p>
                   <h3>Tryckfiler</h3>

@@ -6,7 +6,12 @@ import path from "node:path";
 import fs from "node:fs";
 import sharp from "sharp";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { CARD, renderCard, validateCard } from "../shared/cards.js";
+import {
+  CARD,
+  FRONT_STYLES,
+  renderCard,
+  validateCard,
+} from "../shared/cards.js";
 import {
   authClient,
   authUrl,
@@ -47,7 +52,7 @@ function sameOrigin(req, res, next) {
   const origin = req.get("origin");
   if (origin && !/^http:\/\/127\.0\.0\.1:\d+$/.test(origin))
     return res.status(403).json({ error: "Otillåtet ursprung." });
-  if (req.method !== "GET" && req.get("x-matrika-csrf") !== csrf)
+  if (req.method !== "GET" && req.get("x-matrik-csrf") !== csrf)
     return res
       .status(403)
       .json({ error: "Säkerhetsnyckel saknas. Ladda om sidan." });
@@ -177,6 +182,9 @@ async function exportRecipe(req) {
   const recipe = req.body;
   if (!recipe?.id || !recipe?.name)
     throw Object.assign(new Error("Recept saknas."), { status: 422 });
+  recipe.frontStyle ||= "panel";
+  if (!FRONT_STYLES.some((style) => style.id === recipe.frontStyle))
+    throw Object.assign(new Error("Okänd framsidesvariant."), { status: 422 });
   const auth = authClient();
   const fileId = await findImage(auth, recipe);
   if (fileId) {
@@ -198,7 +206,10 @@ async function exportRecipe(req) {
   return recipe;
 }
 async function png(recipe, side) {
-  return sharp(Buffer.from(renderCard(recipe, side)), { density: CARD.dpi })
+  return sharp(
+    Buffer.from(renderCard(recipe, side, { frontStyle: recipe.frontStyle })),
+    { density: CARD.dpi },
+  )
     .resize(CARD.widthPx, CARD.heightPx)
     .png()
     .toBuffer();
@@ -287,5 +298,5 @@ app.use((error, req, res, next) => {
   });
 });
 app.listen(port, "127.0.0.1", () =>
-  console.log(`Matrika API på http://127.0.0.1:${port}`),
+  console.log(`Matrik API på http://127.0.0.1:${port}`),
 );

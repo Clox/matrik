@@ -1,6 +1,6 @@
-# Matrika
+# Matrik
 
-Lokal webbapp för familjens recept i Google Sheets och tryckbara matkort. Google Sheet är datakällan. Appen lagrar endast OAuth-token lokalt i `.local/token.json` och lägger inte recept, bilder eller exporter i repot.
+Lokal webbapp för familjens recept i Google Sheets och tryckbara matkort. Namnet uttalas **ma-TRIK** och anspelar på att vara rik på mat. Google Sheet är datakällan. Appen lagrar OAuth-token lokalt i `.local/token.json` och lägger inte recept, bilder eller exporter i repot.
 
 ## Kom igång (Linux)
 
@@ -24,6 +24,7 @@ npm run dev
 1. Öppna **M007 Tacos** i receptlistan. Kontrollera att namn, recept och de relationella ingredienserna kommer från Sheet.
 2. Ändra exempelvis kortnamn eller en mängd. Båda kortsidorna uppdateras cirka 600 ms efter sista ändringen utan export eller Google-skrivning.
    Klicka på en kortsida för att se den större. I den förstorade vyn kan du växla mellan fram- och baksida och stänga med Escape.
+   Jämför de tre framsidorna: semitransparent panel, text på bilden och svag lokal toning. Den valda varianten används också i PNG- och PDF-export och sparas i webbläsaren, utan ny kolumn i Google Sheet.
 3. Välj **Spara i Sheet**. Läs om sidan eller kontrollera Google Sheet för att se att ändringen finns kvar.
 4. Lägg till en förberedelse, fyll i typ, ledtid, tidpunktstyp och instruktion och spara. Kontrollera att en ny rad med M007 finns i `Rätt-förberedelser`. Testa även att ändra, inaktivera och ta bort raden. `Har förberedelser` i `Rätter` är en beräknad hjälpkolumn och uppdateras av Sheet när en aktiv förberedelse finns.
 5. Exportera framsida, baksida eller A4 proof. PNG är 815 × 1110 px (69 × 94 mm vid 300 dpi). A4 proof placerar korten i faktisk fysisk storlek; skriv ut i 100 %, utan sidanspassning.
@@ -38,6 +39,8 @@ Varje förberedelse är en egen rad kopplad till rätten via `Rätt-ID`. Nya rad
 Sparning använder en revisionskontroll. Om någon ändrat rätten i Sheet sedan den öppnades får du ett konfliktfel och behöver ladda om. Nya ingredienser får nästa lediga ID med samma prefix och sifferbredd som registret. Ändringar i ingredienslistan skrivs till `Rätt-ingredienser`; borttagna relationer avaktiveras genom att ID-fälten töms. Google-data är alltid källa vid omladdning.
 
 Kortens framsida och baksida byggs från samma SVG-funktion i preview och export. QR-koden innehåller rättens M-ID. Valideringen stoppar export när ingredienslistan eller instruktionen inte ryms och visar varningar för lång titel eller saknad bild. Personspecifik och fast mängd behålls mellan portionstalen; proportionell mängd skalas och `Hela enheter` avrundas uppåt.
+
+Källkoden finns på [github.com/Clox/matrik](https://github.com/Clox/matrik) och den lokala projektmappen heter `matrik`. En lokal kompatibilitetslänk från den tidigare sökvägen `matrika` kan finnas kvar för äldre verktygsinställningar. Google Cloud-projektets tekniska ID `matrika-514800` är oföränderligt; dess visningsnamn och OAuth-appens namn är Matrik.
 
 ## Säkerhet och lokal data
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import sharp from "sharp";
 import {
   CARD,
+  FRONT_STYLES,
   renderCard,
   scaledQuantity,
   validateCard,
@@ -109,6 +110,44 @@ test("samma SVG kan renderas i preview och export i tryckstorlek", async () => {
   const meta = await sharp(png).metadata();
   assert.equal(meta.width, 815);
   assert.equal(meta.height, 1110);
+});
+test("framsidesvarianterna behåller bilden utanför textytan", async () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  const sourceColor = [160, 195, 90];
+  const photo = await sharp({
+    create: {
+      width: 690,
+      height: 940,
+      channels: 3,
+      background: { r: sourceColor[0], g: sourceColor[1], b: sourceColor[2] },
+    },
+  })
+    .png()
+    .toBuffer();
+  recipe.imageDataUrl = `data:image/png;base64,${photo.toString("base64")}`;
+  const samples = {};
+  for (const style of FRONT_STYLES) {
+    const svg = renderCard(recipe, "front", { frontStyle: style.id });
+    assert.match(svg, /MATRIK · M007/);
+    const { data, info } = await sharp(Buffer.from(svg), { density: CARD.dpi })
+      .resize(CARD.widthPx, CARD.heightPx)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.equal(info.width, CARD.widthPx);
+    assert.equal(info.height, CARD.heightPx);
+    const pixel = (x, y) => [
+      ...data.subarray(
+        (y * info.width + x) * info.channels,
+        (y * info.width + x) * info.channels + 3,
+      ),
+    ];
+    assert.deepEqual(pixel(700, 700), sourceColor);
+    samples[style.id] = pixel(120, 800);
+  }
+  assert.deepEqual(samples.direct, sourceColor);
+  assert.notDeepEqual(samples.panel, samples.direct);
+  assert.notDeepEqual(samples.fade, samples.direct);
 });
 test("layoutfel rapporteras före export", () => {
   const recipe = makeCatalog(fixture).recipes[0];
