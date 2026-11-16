@@ -9,6 +9,12 @@ import {
   validateCard,
 } from "../shared/cards.js";
 import { makeCatalog } from "../shared/schema.js";
+import {
+  DEFAULT_PRINT_PROFILE,
+  printProfileErrors,
+  resolvePrintProfile,
+} from "../shared/print-profile.js";
+import { previewDimensions, printZonesSvg } from "../src/preview-image.js";
 
 const fixture = {
   dishes: [
@@ -108,8 +114,103 @@ test("samma SVG kan renderas i preview och export i tryckstorlek", async () => {
     .png()
     .toBuffer();
   const meta = await sharp(png).metadata();
-  assert.equal(meta.width, 815);
-  assert.equal(meta.height, 1110);
+  assert.equal(meta.width, 822);
+  assert.equal(meta.height, 1122);
+});
+test("MPC-profilen har 1/8 tum bleed och safe area samt minst 822 × 1122 px", () => {
+  const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
+  assert.equal(profile.trimWidthMm, 63);
+  assert.equal(profile.trimHeightMm, 88);
+  assert.equal(profile.bleedMm, 3.175);
+  assert.equal(profile.safeMm, 3.175);
+  assert.equal(profile.dpi, 300);
+  assert.equal(profile.widthMm, 69.35);
+  assert.equal(profile.heightMm, 94.35);
+  assert.equal(profile.widthPx, 822);
+  assert.equal(profile.heightPx, 1122);
+  assert.ok(
+    printProfileErrors({
+      ...DEFAULT_PRINT_PROFILE,
+      exportWidthPx: 821,
+    }).length,
+  );
+});
+test("framsidans panel och QR-ruta ligger helt innanför safe area", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
+  const safe = (profile.bleedMm + profile.safeMm) * 10;
+  for (const title of ["Tacos", "Kyckling med curry"]) {
+    recipe.shortName = title;
+    recipe.activeTime = 20;
+    const svg = renderCard(recipe, "front");
+    const transform = svg.match(
+      /<g transform="translate\(([-\d.]+) ([-\d.]+)\) scale\(([-\d.]+)\)"><g transform="translate\(([-\d.]+) ([-\d.]+)\)">/,
+    );
+    assert.ok(transform);
+    const [, x, y, scale, dx, dy] = transform.map(Number);
+    const panel = svg.match(
+      /<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)" rx="12"/,
+    );
+    const qr = svg.match(
+      /<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)" rx="10" fill="white"/,
+    );
+    for (const rect of [panel, qr]) {
+      assert.ok(rect);
+      const [, left, top, width, height] = rect.map(Number);
+      assert.ok(x + (dx + left) * scale >= safe);
+      assert.ok(y + (dy + top) * scale >= safe);
+      assert.ok(x + (dx + left + width) * scale <= profile.widthUnits - safe);
+      assert.ok(y + (dy + top + height) * scale <= profile.heightUnits - safe);
+    }
+    assert.doesNotMatch(svg, /print-zones-overlay|trim-guide|safe-guide/);
+  }
+});
+test("previewns tryckzoner är en separat bild och följer valt PNG-läge", () => {
+  const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
+  const clean = previewDimensions(profile, false);
+  const marked = previewDimensions(profile, true);
+  assert.equal(clean.width, 747);
+  assert.equal(clean.height, 1043);
+  assert.deepEqual(marked, { width: 822, height: 1122 });
+  const overlay = printZonesSvg(profile);
+  assert.match(overlay, /fill-rule="evenodd"/);
+  assert.match(overlay, /x="31\.75" y="31\.75"/);
+  assert.match(overlay, /x="63\.5" y="63\.5"/);
+  assert.doesNotMatch(
+    renderCard(makeCatalog(fixture).recipes[0], "front"),
+    /fill-rule="evenodd"/,
+  );
+});
+test("egen tryckprofil styr SVG-mått och kräver tillräcklig upplösning", () => {
+  const custom = {
+    ...DEFAULT_PRINT_PROFILE,
+    id: "custom",
+    name: "Provprofil",
+    trimWidthMm: 70,
+    trimHeightMm: 100,
+    exportWidthPx: 1000,
+    exportHeightPx: 1300,
+  };
+  const profile = resolvePrintProfile(custom);
+  assert.equal(profile.widthMm, 76.35);
+  assert.equal(profile.heightMm, 106.35);
+  const svg = renderCard(makeCatalog(fixture).recipes[0], "back", {
+    printProfile: custom,
+  });
+  assert.match(svg, /width="76\.35mm" height="106\.35mm"/);
+  assert.ok(printProfileErrors({ ...custom, exportWidthPx: 800 }).length);
+});
+test("baksidan har kompakt rubrik och inga tryckta trimmarkeringar", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  recipe.shortName = "Tacos";
+  recipe.activeTime = 20;
+  recipe.totalTime = 25;
+  const svg = renderCard(recipe, "back");
+  assert.match(svg, /Tacos · M007<\/text>/);
+  assert.match(svg, /20 min aktiv · 25 min totalt/);
+  assert.doesNotMatch(svg, /MATRIK/);
+  assert.doesNotMatch(svg, /<rect x="30" y="30"/);
+  assert.match(svg, /<text x="66" y="168"[^>]*>INGREDIENSER/);
 });
 test("framsidesvarianterna behåller bilden utanför textytan", async () => {
   const recipe = makeCatalog(fixture).recipes[0];

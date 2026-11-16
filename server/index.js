@@ -6,12 +6,11 @@ import path from "node:path";
 import fs from "node:fs";
 import sharp from "sharp";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
 import {
-  CARD,
-  FRONT_STYLES,
-  renderCard,
-  validateCard,
-} from "../shared/cards.js";
+  DEFAULT_PRINT_PROFILE,
+  resolvePrintProfile,
+} from "../shared/print-profile.js";
 import {
   authClient,
   authUrl,
@@ -185,6 +184,12 @@ async function exportRecipe(req) {
   recipe.frontStyle ||= "panel";
   if (!FRONT_STYLES.some((style) => style.id === recipe.frontStyle))
     throw Object.assign(new Error("Okänd framsidesvariant."), { status: 422 });
+  recipe.printProfile ||= DEFAULT_PRINT_PROFILE;
+  try {
+    resolvePrintProfile(recipe.printProfile);
+  } catch (error) {
+    throw Object.assign(error, { status: 422 });
+  }
   const auth = authClient();
   const fileId = await findImage(auth, recipe);
   if (fileId) {
@@ -192,7 +197,7 @@ async function exportRecipe(req) {
     const meta = await sharp(bytes).metadata();
     recipe.imageDataUrl = `data:image/${meta.format === "jpeg" ? "jpeg" : meta.format};base64,${bytes.toString("base64")}`;
   }
-  const issues = validateCard(recipe);
+  const issues = validateCard(recipe, recipe.printProfile);
   if (issues.some((x) => x.level === "error"))
     throw Object.assign(
       new Error(
@@ -206,11 +211,17 @@ async function exportRecipe(req) {
   return recipe;
 }
 async function png(recipe, side) {
+  const profile = resolvePrintProfile(recipe.printProfile);
   return sharp(
-    Buffer.from(renderCard(recipe, side, { frontStyle: recipe.frontStyle })),
-    { density: CARD.dpi },
+    Buffer.from(
+      renderCard(recipe, side, {
+        frontStyle: recipe.frontStyle,
+        printProfile: recipe.printProfile,
+      }),
+    ),
+    { density: profile.dpi },
   )
-    .resize(CARD.widthPx, CARD.heightPx)
+    .resize(profile.widthPx, profile.heightPx)
     .png()
     .toBuffer();
 }
@@ -234,24 +245,40 @@ app.post(
   sameOrigin,
   asyncRoute(async (req, res) => {
     const recipe = await exportRecipe(req);
+    const profile = resolvePrintProfile(recipe.printProfile);
     const [front, back] = await Promise.all([
       png(recipe, "front"),
       png(recipe, "back"),
     ]);
     const pdf = await PDFDocument.create();
-    const page = pdf.addPage([595.28, 841.89]);
     const font = await pdf.embedFont(StandardFonts.Helvetica);
-    const width = (CARD.widthMm * 72) / 25.4,
-      height = (CARD.heightMm * 72) / 25.4;
-    const y = 841.89 - 90 - height;
-    const x1 = 65,
-      x2 = 595.28 - 65 - width;
-    page.drawImage(await pdf.embedPng(front), { x: x1, y, width, height });
-    page.drawImage(await pdf.embedPng(back), { x: x2, y, width, height });
-    for (const [x, label] of [
-      [x1, "Framsida"],
-      [x2, "Baksida"],
+    const width = (profile.widthMm * 72) / 25.4,
+      height = (profile.heightMm * 72) / 25.4;
+    if (width > 595.28 - 84 || height > 841.89 - 120)
+      throw Object.assign(
+        new Error("Tryckprofilen är för stor för A4 proof."),
+        {
+          status: 422,
+        },
+      );
+    const y = 841.89 - 70 - height;
+    const bothFit = 2 * width + 130 <= 595.28;
+    const frontImage = await pdf.embedPng(front);
+    const backImage = await pdf.embedPng(back);
+    for (const [index, image, label] of [
+      [0, frontImage, "Framsida"],
+      [1, backImage, "Baksida"],
     ]) {
+      const page =
+        index === 0 || !bothFit
+          ? pdf.addPage([595.28, 841.89])
+          : pdf.getPages()[0];
+      const x = bothFit
+        ? index === 0
+          ? 65
+          : 595.28 - 65 - width
+        : (595.28 - width) / 2;
+      page.drawImage(image, { x, y, width, height });
       page.drawText(label, {
         x,
         y: y - 20,
@@ -259,20 +286,12 @@ app.post(
         font,
         color: rgb(0.25, 0.3, 0.26),
       });
-      page.drawRectangle({
-        x: x + (3 * 72) / 25.4,
-        y: y + (3 * 72) / 25.4,
-        width: (63 * 72) / 25.4,
-        height: (88 * 72) / 25.4,
-        borderWidth: 0.4,
-        borderColor: rgb(0.6, 0.6, 0.6),
-        opacity: 0,
-      });
+      if (index === 1 || !bothFit)
+        page.drawText(
+          `${recipe.id} - ${profile.widthMm} x ${profile.heightMm} mm inklusive utfall - ${profile.dpi} dpi - skriv ut i 100 %`,
+          { x: 42, y: 30, size: 9, font },
+        );
     }
-    page.drawText(
-      `${recipe.id} · 69 × 94 mm inkl. 3 mm utfall · 300 dpi · skriv ut i 100 %`,
-      { x: 65, y: 42, size: 9, font },
-    );
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${recipe.id}-proof.pdf"`,

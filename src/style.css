@@ -429,6 +429,25 @@ h3 {
   font-size: 10px;
   white-space: nowrap;
 }
+.preview-controls {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
+}
+.trim-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #36503c;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.trim-toggle input {
+  accent-color: #36503c;
+}
 .cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -446,6 +465,41 @@ h3 {
 .settings-view {
   max-width: 1000px;
   margin: 0 auto;
+}
+.settings-card + .settings-card {
+  margin-top: 22px;
+}
+.profile-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.profile-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4d6251;
+}
+.profile-fields input,
+.profile-fields select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #cbd5c8;
+  border-radius: 7px;
+  color: #253729;
+  background: white;
+}
+.settings-card .profile-note {
+  margin-bottom: 14px;
+}
+.settings-card .profile-error {
+  color: #a64a31;
+  margin-bottom: 12px;
 }
 .settings-heading {
   display: flex;
@@ -526,7 +580,7 @@ h3 {
   border-radius: 6px;
   cursor: zoom-in;
 }
-.card-trigger:hover .card {
+.card-trigger:hover .card-preview-surface {
   box-shadow: 0 13px 30px #1b2c1c55;
 }
 .card-trigger:focus-visible,
@@ -537,12 +591,38 @@ h3 {
 .card {
   display: block;
   width: 100%;
+  height: 100%;
+  aspect-ratio: 69/94;
+  background: white;
+}
+.card-preview-frame {
+  display: block;
+  position: relative;
+  width: 100%;
   max-width: 250px;
   margin: auto;
   aspect-ratio: 69/94;
-  box-shadow: 0 10px 25px #1b2c1c33;
-  background: white;
+}
+.card-preview-surface {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
+  background: white;
+  box-shadow: 0 10px 25px #1b2c1c33;
+}
+.card-preview-surface > img {
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+.card-preview-surface > .print-zones-overlay {
+  inset: 0;
+  pointer-events: none;
+}
+.print-zone-key {
+  color: #657261;
+  font-size: 11px;
 }
 .card-overlay {
   position: fixed;
@@ -606,11 +686,15 @@ h3 {
 }
 .card-dialog-image {
   width: min(100%, 560px, 55dvh);
+  max-width: none;
   aspect-ratio: 69 / 94;
   flex: none;
-  overflow: hidden;
-  background: white;
+}
+.card-dialog-image .card-preview-surface {
   box-shadow: 0 9px 28px #1b2c1c44;
+}
+.card-dialog-image img {
+  display: block;
 }
 .card-image-actions {
   display: flex;
@@ -760,6 +844,9 @@ h3 {
   .front-compare-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .profile-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .ingredient-fields {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -770,6 +857,9 @@ h3 {
     flex-direction: column;
   }
   .front-compare-options {
+    grid-template-columns: 1fr;
+  }
+  .profile-fields {
     grid-template-columns: 1fr;
   }
   .topbar {

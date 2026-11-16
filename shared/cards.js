@@ -1,15 +1,7 @@
 import QRCode from "qrcode";
+import { DEFAULT_PRINT_PROFILE, resolvePrintProfile } from "./print-profile.js";
 
-export const CARD = {
-  widthMm: 69,
-  heightMm: 94,
-  trimWidthMm: 63,
-  trimHeightMm: 88,
-  bleedMm: 3,
-  dpi: 300,
-  widthPx: 815,
-  heightPx: 1110,
-};
+export const CARD = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 export const FRONT_STYLES = [
   {
     id: "panel",
@@ -47,7 +39,9 @@ const fmt = (number) =>
   Number.isInteger(number)
     ? String(number)
     : String(Math.round(number * 10) / 10).replace(".", ",");
-const BACK_TABLE_Y = 242;
+const BACK_TABLE_Y = 178;
+const backInstructionY = (ingredientCount, rowHeight) =>
+  Math.max(BACK_TABLE_Y + ingredientCount * rowHeight + 48, 330);
 export function scaledQuantity(line, portions, baseServings) {
   const base = asNumber(line.quantity);
   const kind = String(line.scaling || "").toLowerCase();
@@ -71,7 +65,19 @@ function wrap(text, maxChars) {
   }
   return out;
 }
-export function validateCard(recipe) {
+function fitText(text, fontSize, maxWidth) {
+  const approximateWidth =
+    [...text].reduce((width, char) => {
+      if ("WMÅÄÖ@%".includes(char)) return width + 0.95;
+      if ("ilI.,:;!| ".includes(char)) return width + 0.3;
+      return width + 0.62;
+    }, 0) * fontSize;
+  return approximateWidth > maxWidth
+    ? `textLength="${maxWidth}" lengthAdjust="spacingAndGlyphs"`
+    : "";
+}
+export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
+  resolvePrintProfile(profile);
   const issues = [];
   const title = recipe.shortName || recipe.name || "";
   if (!title)
@@ -86,6 +92,11 @@ export function validateCard(recipe) {
       level: "warning",
       message: "Titeln är lång. Kontrollera att den ryms på båda sidor.",
     });
+  if (wrap(title, 15).length > 2)
+    issues.push({
+      level: "error",
+      message: "Titeln behöver ett kortnamn som ryms på högst två rader.",
+    });
   if ((recipe.ingredients || []).length > 14)
     issues.push({
       level: "error",
@@ -98,9 +109,11 @@ export function validateCard(recipe) {
     });
   const lines = wrap(recipe.cardRecipe || recipe.recipe, 57);
   const rowHeight = (recipe.ingredients || []).length > 10 ? 31 : 37;
-  const tableEnd = BACK_TABLE_Y + (recipe.ingredients || []).length * rowHeight;
-  const instructionY = Math.max(tableEnd + 70, 630);
-  const available = Math.floor((880 - instructionY - 36) / 25) + 1;
+  const instructionY = backInstructionY(
+    (recipe.ingredients || []).length,
+    rowHeight,
+  );
+  const available = Math.floor((860 - instructionY - 36) / 25) + 1;
   if (lines.length > available)
     issues.push({
       level: "error",
@@ -112,11 +125,27 @@ export function validateCard(recipe) {
     issues.push({ level: "warning", message: "Framsidan saknar matbild." });
   return issues;
 }
-const svgStart =
-  '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="69mm" height="94mm" viewBox="0 0 690 940">';
-export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
+function svgStart(profile) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${profile.widthMm}mm" height="${profile.heightMm}mm" viewBox="0 0 ${profile.widthUnits} ${profile.heightUnits}" preserveAspectRatio="none">`;
+}
+function contentTransform(profile) {
+  const contentEdge = (profile.bleedMm + profile.safeMm) * 10 + 10;
+  const safeWidth = profile.widthUnits - 2 * contentEdge;
+  const safeHeight = profile.heightUnits - 2 * contentEdge;
+  const scale = Math.min(safeWidth / (625 - 62), safeHeight / (873 - 55));
+  const x = contentEdge - 62 * scale + (safeWidth - (625 - 62) * scale) / 2;
+  const y = contentEdge - 55 * scale + (safeHeight - (873 - 55) * scale) / 2;
+  return `translate(${x} ${y}) scale(${scale})`;
+}
+export function renderCard(
+  recipe,
+  side,
+  { frontStyle = "panel", printProfile = DEFAULT_PRINT_PROFILE } = {},
+) {
+  const profile = resolvePrintProfile(printProfile);
   const id = esc(recipe.id || "");
-  const title = esc(recipe.shortName || recipe.name || "Namnlös rätt");
+  const rawTitle = recipe.shortName || recipe.name || "Namnlös rätt";
+  const title = esc(rawTitle);
   if (side === "front") {
     const qr = QRCode.create(recipe.id || "M000", {
       errorCorrectionLevel: "M",
@@ -127,9 +156,9 @@ export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
     for (let y = 0; y < size; y++)
       for (let x = 0; x < size; x++)
         if (qr.get(x, y))
-          qrDots += `<rect x="${460 + x * dot}" y="${720 + y * dot}" width="${dot + 0.08}" height="${dot + 0.08}"/>`;
+          qrDots += `<rect x="${446 + x * dot}" y="${695 + y * dot}" width="${dot + 0.08}" height="${dot + 0.08}"/>`;
     const photo = recipe.imageDataUrl
-      ? `<image href="${esc(recipe.imageDataUrl)}" x="0" y="0" width="690" height="940" preserveAspectRatio="xMidYMid slice"/>`
+      ? `<image href="${esc(recipe.imageDataUrl)}" x="0" y="0" width="${profile.widthUnits}" height="${profile.heightUnits}" preserveAspectRatio="xMidYMid slice"/>`
       : "";
     const variant = FRONT_STYLES.some((style) => style.id === frontStyle)
       ? frontStyle
@@ -162,7 +191,7 @@ export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
     const titleLines = titleParts
       .map(
         (line, i) =>
-          `<text x="66" y="${layout.titleY + i * layout.titleStep}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : ""}>${esc(line)}</text>`,
+          `<text x="66" y="${layout.titleY + i * layout.titleStep}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${fitText(line, 43, variant === "panel" ? 340 : 540)} ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : ""}>${esc(line)}</text>`,
       )
       .join("");
     const textOutline =
@@ -175,7 +204,7 @@ export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
         : variant === "fade"
           ? '<rect x="28" y="590" width="425" height="310" fill="url(#textFade)"/>'
           : "";
-    return `${svgStart}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="690" height="940" fill="url(#bg)"/>${photo}${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="445" y="705" width="180" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></svg>`;
+    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="680" width="172" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></g></g></svg>`;
   }
   const lines = recipe.ingredients || [];
   const rowHeight = lines.length > 10 ? 31 : 37;
@@ -195,14 +224,22 @@ export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
       return `<rect x="55" y="${y}" width="580" height="${rowHeight}" fill="${index % 2 ? "#f4f1e9" : "white"}"/><text x="66" y="${y + 24}" font-size="18">${name}</text><text x="338" y="${y + 24}" font-size="17" fill="#617162">${esc(item.unit)}</text>${cells}`;
     })
     .join("");
-  const endY = tableY + lines.length * rowHeight;
-  const instructionY = Math.max(endY + 70, 630);
+  const instructionY = backInstructionY(lines.length, rowHeight);
+  const backTitleSize =
+    rawTitle.length <= 16 ? 43 : rawTitle.length <= 22 ? 34 : 27;
+  const backTitle = `${rawTitle} · ${recipe.id || ""}`;
+  const backTimes = [
+    recipe.activeTime ? `${recipe.activeTime} min aktiv` : "",
+    recipe.totalTime ? `${recipe.totalTime} min totalt` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const instructions = wrap(recipe.cardRecipe || recipe.recipe, 57)
-    .slice(0, Math.max(0, Math.floor((880 - instructionY - 36) / 25) + 1))
+    .slice(0, Math.max(0, Math.floor((860 - instructionY - 36) / 25) + 1))
     .map(
       (line, i) =>
-        `<text x="60" y="${instructionY + 36 + i * 25}" font-size="19">${esc(line)}</text>`,
+        `<text x="66" y="${instructionY + 36 + i * 25}" font-size="19" ${fitText(line, 19, 540)}>${esc(line)}</text>`,
     )
     .join("");
-  return `${svgStart}<rect width="690" height="940" fill="#f9f7f0"/><rect x="30" y="30" width="630" height="880" fill="none" stroke="#e3ded1" stroke-width="2"/><text x="60" y="100" font-family="sans-serif" font-size="20" letter-spacing="4" fill="#657261">MATRIK · ${id}</text><text x="60" y="156" font-family="sans-serif" font-size="${title.length > 22 ? 33 : 43}" font-weight="700" fill="#1e3327">${title}</text><text x="60" y="197" font-family="sans-serif" font-size="17" fill="#657261">${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv` : "")} ${esc(recipe.totalTime ? `· ${recipe.totalTime} min totalt` : "")}</text><line x1="55" y1="208" x2="635" y2="208" stroke="#b9c3b6"/><g font-family="sans-serif" fill="#243a2b"><text x="66" y="232" font-size="14" fill="#657261">INGREDIENSER</text><text x="424" y="232" text-anchor="end" font-size="16">4</text><text x="500" y="232" text-anchor="end" font-size="16">6</text><text x="576" y="232" text-anchor="end" font-size="16">8</text>${rows}<text x="60" y="${instructionY}" font-size="20" font-weight="700">GÖR SÅ HÄR</text>${instructions}</g></svg>`;
+  return `${svgStart(profile)}<rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="#f9f7f0"/><g transform="${contentTransform(profile)}"><text x="66" y="91" font-family="sans-serif" font-size="${backTitleSize}" font-weight="700" fill="#1e3327" ${fitText(backTitle, backTitleSize, 540)}>${title} · ${id}</text><text x="66" y="126" font-family="sans-serif" font-size="17" fill="#657261">${esc(backTimes)}</text><line x1="55" y1="143" x2="635" y2="143" stroke="#b9c3b6"/><g font-family="sans-serif" fill="#243a2b"><text x="66" y="168" font-size="14" fill="#657261">INGREDIENSER</text><text x="424" y="168" text-anchor="end" font-size="16">4</text><text x="500" y="168" text-anchor="end" font-size="16">6</text><text x="576" y="168" text-anchor="end" font-size="16">8</text>${rows}<text x="66" y="${instructionY}" font-size="20" font-weight="700">GÖR SÅ HÄR</text>${instructions}</g></g></svg>`;
 }

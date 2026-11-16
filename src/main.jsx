@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
 import {
-  CARD,
-  FRONT_STYLES,
-  renderCard,
-  validateCard,
-} from "../shared/cards.js";
+  DEFAULT_PRINT_PROFILE,
+  PRINT_PROFILES,
+  printProfileErrors,
+  resolvePrintProfile,
+} from "../shared/print-profile.js";
+import { previewPng, printZonesUrl } from "./preview-image.js";
 import "./style.css";
 
 async function json(url, options = {}) {
@@ -22,12 +24,12 @@ function fileName(response) {
       ?.match(/filename="([^"]+)"/)?.[1] || "matrik-export"
   );
 }
-async function download(url, recipe, csrf, frontStyle) {
+async function download(url, recipe, csrf, frontStyle, printProfile) {
   const { imageDataUrl, ...payload } = recipe;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-matrik-csrf": csrf },
-    body: JSON.stringify({ ...payload, frontStyle }),
+    body: JSON.stringify({ ...payload, frontStyle, printProfile }),
   });
   if (!response.ok)
     throw new Error(
@@ -64,50 +66,74 @@ function useCardImageUrls(cards) {
   }, [urls]);
   return urls;
 }
-function cardPng(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = CARD.widthPx;
-        canvas.height = CARD.heightPx;
-        canvas
-          .getContext("2d")
-          .drawImage(image, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(
-          (blob) =>
-            blob
-              ? resolve(blob)
-              : reject(new Error("Kunde inte skapa PNG-bilden.")),
-          "image/png",
-        );
-      } catch (error) {
-        reject(error);
-      }
-    };
-    image.onerror = () => reject(new Error("Kunde inte läsa kortbilden."));
-    image.src = url;
-  });
+function CardPreviewImage({
+  src,
+  alt,
+  profile,
+  showPrintZones,
+  enlarged = false,
+}) {
+  const bleed = profile.bleedMm;
+  const imageStyle = showPrintZones
+    ? undefined
+    : {
+        width: `${(profile.widthMm / profile.trimWidthMm) * 100}%`,
+        height: `${(profile.heightMm / profile.trimHeightMm) * 100}%`,
+        left: `${(-bleed / profile.trimWidthMm) * 100}%`,
+        top: `${(-bleed / profile.trimHeightMm) * 100}%`,
+      };
+  const surfaceStyle = showPrintZones
+    ? undefined
+    : {
+        inset: `${(bleed / profile.heightMm) * 100}% ${(bleed / profile.widthMm) * 100}%`,
+      };
+  return (
+    <span
+      className={`card-preview-frame${enlarged ? " card-dialog-image" : ""}`}
+      style={{ aspectRatio: `${profile.widthPx} / ${profile.heightPx}` }}
+    >
+      <span className="card-preview-surface" style={surfaceStyle}>
+        <img src={src} alt={alt} style={imageStyle} />
+        {showPrintZones && (
+          <img
+            className="print-zones-overlay"
+            src={printZonesUrl(profile)}
+            alt=""
+            aria-hidden="true"
+          />
+        )}
+      </span>
+    </span>
+  );
 }
-function Preview({ recipe, frontStyle }) {
-  const issues = useMemo(() => validateCard(recipe), [recipe]);
+function Preview({ recipe, frontStyle, printProfile }) {
+  const profile = useMemo(
+    () => resolvePrintProfile(printProfile),
+    [printProfile],
+  );
+  const issues = useMemo(
+    () => validateCard(recipe, printProfile),
+    [recipe, printProfile],
+  );
   const cards = useMemo(
     () => ({
-      front: renderCard(recipe, "front", { frontStyle }),
-      back: renderCard(recipe, "back"),
+      front: renderCard(recipe, "front", { frontStyle, printProfile }),
+      back: renderCard(recipe, "back", { printProfile }),
     }),
-    [recipe, frontStyle],
+    [recipe, frontStyle, printProfile],
   );
   const cardUrls = useCardImageUrls(cards);
   const [expandedSide, setExpandedSide] = useState(null);
   const [copyMessage, setCopyMessage] = useState("");
+  const [showPrintZones, setShowPrintZones] = useState(false);
   const saveCard = async () => {
     try {
-      const url = URL.createObjectURL(await cardPng(cardUrls[expandedSide]));
+      const url = URL.createObjectURL(
+        await previewPng(cardUrls[expandedSide], profile, showPrintZones),
+      );
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${recipe.id}-${expandedSide}.png`;
+      link.download = `${recipe.id}-${expandedSide}-preview.png`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setCopyMessage("PNG-bilden har sparats.");
@@ -123,7 +149,7 @@ function Preview({ recipe, frontStyle }) {
       return;
     }
     try {
-      const png = cardPng(cardUrls[expandedSide]);
+      const png = previewPng(cardUrls[expandedSide], profile, showPrintZones);
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": png }),
       ]);
@@ -170,7 +196,27 @@ function Preview({ recipe, frontStyle }) {
           <p className="eyebrow">Live-preview</p>
           <h2>Kortet som det trycks</h2>
         </div>
-        <span className="format">63 × 88 mm + 3 mm utfall</span>
+        <div className="preview-controls">
+          <span className="format">
+            {profile.trimWidthMm} × {profile.trimHeightMm} mm +{" "}
+            {profile.bleedMm} mm utfall
+          </span>
+          <label className="trim-toggle">
+            <input
+              type="checkbox"
+              checked={showPrintZones}
+              onChange={(event) => setShowPrintZones(event.target.checked)}
+            />
+            Visa tryckzoner
+          </label>
+          <span
+            className="print-zone-key"
+            style={{ visibility: showPrintZones ? "visible" : "hidden" }}
+            aria-hidden={!showPrintZones}
+          >
+            Tonat: bleed · Streck: trim · Prickar: safe area
+          </span>
+        </div>
       </div>
       <div className="cards">
         <div>
@@ -180,7 +226,12 @@ function Preview({ recipe, frontStyle }) {
             aria-label="Visa framsidan större"
             onClick={() => setExpandedSide("front")}
           >
-            <img className="card" src={cardUrls.front} alt="Kortets framsida" />
+            <CardPreviewImage
+              src={cardUrls.front}
+              alt="Kortets framsida"
+              profile={profile}
+              showPrintZones={showPrintZones}
+            />
           </button>
           <p>Framsida</p>
         </div>
@@ -191,7 +242,12 @@ function Preview({ recipe, frontStyle }) {
             aria-label="Visa baksidan större"
             onClick={() => setExpandedSide("back")}
           >
-            <img className="card" src={cardUrls.back} alt="Kortets baksida" />
+            <CardPreviewImage
+              src={cardUrls.back}
+              alt="Kortets baksida"
+              profile={profile}
+              showPrintZones={showPrintZones}
+            />
           </button>
           <p>Baksida · 4 / 6 / 8 portioner</p>
         </div>
@@ -253,10 +309,27 @@ function Preview({ recipe, frontStyle }) {
                   Baksida
                 </button>
               </div>
-              <img
-                className="card-dialog-image"
+              <label className="trim-toggle">
+                <input
+                  type="checkbox"
+                  checked={showPrintZones}
+                  onChange={(event) => setShowPrintZones(event.target.checked)}
+                />
+                Visa tryckzoner
+              </label>
+              <span
+                className="print-zone-key"
+                style={{ visibility: showPrintZones ? "visible" : "hidden" }}
+                aria-hidden={!showPrintZones}
+              >
+                Tonat: bleed · Streck: trim · Prickar: safe area
+              </span>
+              <CardPreviewImage
                 src={cardUrls[expandedSide]}
                 alt={`Kortets ${expandedSide === "front" ? "framsida" : "baksida"}`}
+                profile={profile}
+                showPrintZones={showPrintZones}
+                enlarged
               />
               <div className="card-image-actions">
                 <button type="button" onClick={saveCard}>
@@ -266,6 +339,10 @@ function Preview({ recipe, frontStyle }) {
                   Kopiera bild som PNG
                 </button>
               </div>
+              <p className="print-zone-key">
+                Preview-PNG följer visningen. Tryckfiler exporteras alltid utan
+                tryckzoner.
+              </p>
               {copyMessage && (
                 <p className="card-copy-message" role="status">
                   {copyMessage}
@@ -293,11 +370,50 @@ function Preview({ recipe, frontStyle }) {
 function Settings({
   frontStyle,
   onFrontStyleChange,
+  printProfile,
+  onPrintProfileChange,
   recipe,
   onBack,
   backLabel,
 }) {
   const [loadedImage, setLoadedImage] = useState(null);
+  const activeProfile = resolvePrintProfile(printProfile);
+  const [profileDraft, setProfileDraft] = useState(printProfile);
+  const [profileError, setProfileError] = useState("");
+  useEffect(() => setProfileDraft(printProfile), [printProfile]);
+  const setProfileField = (key, value) => {
+    setProfileError("");
+    setProfileDraft((current) => ({
+      ...current,
+      id: "custom",
+      name:
+        key === "name"
+          ? value
+          : current.id === DEFAULT_PRINT_PROFILE.id
+            ? "Egen profil"
+            : current.name,
+      [key]: value,
+    }));
+  };
+  const applyProfile = () => {
+    const errors = printProfileErrors(profileDraft);
+    if (errors.length) {
+      setProfileError(errors.join(" "));
+      return;
+    }
+    onPrintProfileChange({
+      id: profileDraft.id,
+      name: String(profileDraft.name).trim(),
+      trimWidthMm: Number(profileDraft.trimWidthMm),
+      trimHeightMm: Number(profileDraft.trimHeightMm),
+      bleedMm: Number(profileDraft.bleedMm),
+      safeMm: Number(profileDraft.safeMm),
+      dpi: Number(profileDraft.dpi),
+      exportWidthPx: Number(profileDraft.exportWidthPx),
+      exportHeightPx: Number(profileDraft.exportHeightPx),
+    });
+    setProfileError("");
+  };
   const recipeId = recipe?.id;
   const hasImage = Boolean(recipe?.imageDataUrl);
   useEffect(() => {
@@ -324,11 +440,14 @@ function Settings({
         ? Object.fromEntries(
             FRONT_STYLES.map((style) => [
               style.id,
-              renderCard(cardRecipe, "front", { frontStyle: style.id }),
+              renderCard(cardRecipe, "front", {
+                frontStyle: style.id,
+                printProfile,
+              }),
             ]),
           )
         : {},
-    [cardRecipe],
+    [cardRecipe, printProfile],
   );
   return (
     <div className="settings-view">
@@ -367,6 +486,9 @@ function Settings({
               {fronts[style.id] && (
                 <span
                   className="front-compare-thumb"
+                  style={{
+                    aspectRatio: `${activeProfile.widthPx} / ${activeProfile.heightPx}`,
+                  }}
                   dangerouslySetInnerHTML={{ __html: fronts[style.id] }}
                 />
               )}
@@ -375,6 +497,84 @@ function Settings({
             </button>
           ))}
         </div>
+      </section>
+      <section
+        className="paper settings-card"
+        aria-labelledby="print-profile-heading"
+      >
+        <p className="eyebrow">Tryck</p>
+        <h2 id="print-profile-heading">Tryckprofil</h2>
+        <p>
+          Profilen gäller alla kort och används i förhandsvisning, sparade
+          bilder, PNG och PDF. Ändrade standardmått sparas som Egen profil i den
+          här webbläsaren.
+        </p>
+        <div className="profile-fields">
+          <label>
+            Profil
+            <select
+              value={
+                profileDraft.id === DEFAULT_PRINT_PROFILE.id
+                  ? DEFAULT_PRINT_PROFILE.id
+                  : "custom"
+              }
+              onChange={(event) => {
+                setProfileError("");
+                setProfileDraft(
+                  event.target.value === DEFAULT_PRINT_PROFILE.id
+                    ? { ...DEFAULT_PRINT_PROFILE }
+                    : { ...profileDraft, id: "custom", name: "Egen profil" },
+                );
+              }}
+            >
+              {PRINT_PROFILES.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+              <option value="custom">Egen profil</option>
+            </select>
+          </label>
+          <label>
+            Profilnamn
+            <input
+              value={profileDraft.name}
+              onChange={(event) => setProfileField("name", event.target.value)}
+            />
+          </label>
+          {[
+            ["trimWidthMm", "Trim width (mm)", "0.001"],
+            ["trimHeightMm", "Trim height (mm)", "0.001"],
+            ["bleedMm", "Bleed per sida (mm)", "0.001"],
+            ["safeMm", "Safe area innanför trim (mm)", "0.001"],
+            ["dpi", "DPI", "1"],
+            ["exportWidthPx", "Export width (px)", "1"],
+            ["exportHeightPx", "Export height (px)", "1"],
+          ].map(([key, label, step]) => (
+            <label key={key}>
+              {label}
+              <input
+                type="number"
+                step={step}
+                value={profileDraft[key]}
+                onChange={(event) => setProfileField(key, event.target.value)}
+              />
+            </label>
+          ))}
+        </div>
+        <p className="profile-note">
+          MakePlayingCards kräver minst 822 × 1122 px vid 300 DPI. Även egna
+          profiler måste ha minst så många pixlar som deras fysiska mått och DPI
+          kräver.
+        </p>
+        {profileError && (
+          <p className="profile-error" role="alert">
+            {profileError}
+          </p>
+        )}
+        <button type="button" className="primary" onClick={applyProfile}>
+          Använd tryckprofil
+        </button>
       </section>
     </div>
   );
@@ -702,11 +902,29 @@ function App() {
       return "panel";
     }
   });
+  const [printProfile, setPrintProfile] = useState(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("matrik.settings.printProfile"),
+      );
+      return printProfileErrors(saved).length ? DEFAULT_PRINT_PROFILE : saved;
+    } catch {
+      return DEFAULT_PRINT_PROFILE;
+    }
+  });
   useEffect(() => {
     try {
       localStorage.setItem("matrik.settings.frontStyle", frontStyle);
     } catch {}
   }, [frontStyle]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "matrik.settings.printProfile",
+        JSON.stringify(printProfile),
+      );
+    } catch {}
+  }, [printProfile]);
   const load = async () => {
     setStatusError(null);
     setCatalogRequest((current) => ({
@@ -833,7 +1051,7 @@ function App() {
   const exportFile = async (target) => {
     setMessage("");
     try {
-      await download(target, draft, status.csrf, frontStyle);
+      await download(target, draft, status.csrf, frontStyle, printProfile);
     } catch (error) {
       setMessage(error.message);
     }
@@ -988,6 +1206,8 @@ function App() {
           <Settings
             frontStyle={frontStyle}
             onFrontStyleChange={setFrontStyle}
+            printProfile={printProfile}
+            onPrintProfileChange={setPrintProfile}
             recipe={
               preview ||
               draft ||
@@ -1133,13 +1353,20 @@ function App() {
                 />
               </div>
               <div className="right">
-                <Preview recipe={preview || draft} frontStyle={frontStyle} />
+                <Preview
+                  recipe={preview || draft}
+                  frontStyle={frontStyle}
+                  printProfile={printProfile}
+                />
                 <div className="export-panel">
                   <p className="eyebrow">Exportera vid behov</p>
                   <h3>Tryckfiler</h3>
                   <p>
-                    PNG i 300 dpi, 815 × 1110 px inklusive utfall. PDF i faktisk
-                    storlek på A4.
+                    {resolvePrintProfile(printProfile).name}: PNG i{" "}
+                    {resolvePrintProfile(printProfile).dpi} DPI,{" "}
+                    {resolvePrintProfile(printProfile).widthPx} ×{" "}
+                    {resolvePrintProfile(printProfile).heightPx} px inklusive
+                    utfall. PDF i faktisk storlek på A4.
                   </p>
                   <div className="export-buttons">
                     <button onClick={() => exportFile("/api/export/png/front")}>

@@ -23,11 +23,11 @@ Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet s
 
 1. Öppna **M007 Tacos** i receptlistan. Kontrollera att namn, recept och de relationella ingredienserna kommer från Sheet.
 2. Ändra exempelvis kortnamn eller en mängd. Båda kortsidorna uppdateras cirka 600 ms efter sista ändringen utan export eller Google-skrivning.
-   Klicka på en kortsida för att se den större. I den förstorade vyn kan du växla mellan fram- och baksida och stänga med Escape. Kortet är en riktig SVG-bild som kan sparas via webbläsarens högerklicksmeny. Knapparna **Spara bild som PNG** och **Kopiera bild som PNG** använder den synliga sidan i 815 × 1110 px. Använd PNG-knapparna under **Tryckfiler** för filer som ska tryckas.
+   Klicka på en kortsida för att se den större. I den förstorade vyn kan du växla mellan fram- och baksida och stänga med Escape. **Visa tryckzoner** visar hela exportytan med tonad bleed-zon, trimgräns och safe area. Knapparna **Spara bild som PNG** och **Kopiera bild som PNG** följer visningen: utan zoner får du kortet beskuret vid trim, med zoner får du hela ytan inklusive markeringarna. Använd PNG-knapparna under **Tryckfiler** för rena filer som ska tryckas.
    Under **Inställningar** i sidomenyn kan du jämföra de tre framsidorna: semitransparent panel, text på bilden och svag lokal toning. Semitransparent panel är standardvalet. Inställningen gäller alla rätter, används också i PNG- och PDF-export och sparas i webbläsaren, utan ny kolumn i Google Sheet.
 3. Välj **Spara i Sheet**. Läs om sidan eller kontrollera Google Sheet för att se att ändringen finns kvar.
 4. Lägg till en förberedelse, fyll i typ, ledtid, tidpunktstyp och instruktion och spara. Kontrollera att en ny rad med M007 finns i `Rätt-förberedelser`. Testa även att ändra, inaktivera och ta bort raden. `Har förberedelser` i `Rätter` är en beräknad hjälpkolumn och uppdateras av Sheet när en aktiv förberedelse finns.
-5. Exportera framsida, baksida eller A4 proof. PNG är 815 × 1110 px (69 × 94 mm vid 300 dpi). A4 proof placerar korten i faktisk fysisk storlek; skriv ut i 100 %, utan sidanspassning.
+5. Exportera framsida, baksida eller A4 proof. Standardprofilen ger PNG i 822 × 1122 px och ett kort med 63 × 88 mm trim samt 3,175 mm utfall per sida. A4 proof placerar korten i faktisk fysisk storlek, på två sidor om en bred egen profil inte får plats sida vid sida; skriv ut i 100 %, utan sidanspassning.
 6. Ladda upp en rättbild om M007 saknar bild. Den skickas till den konfigurerade Drive-mappen. Välj sedan **Spara i Sheet** för att koppla fil-ID till rätten.
 
 ## Sheet-format och beteende
@@ -39,6 +39,12 @@ Varje förberedelse är en egen rad kopplad till rätten via `Rätt-ID`. Nya rad
 Sparning använder en revisionskontroll. Om någon ändrat rätten i Sheet sedan den öppnades får du ett konfliktfel och behöver ladda om. Nya ingredienser får nästa lediga ID med samma prefix och sifferbredd som registret. Ändringar i ingredienslistan skrivs till `Rätt-ingredienser`; borttagna relationer avaktiveras genom att ID-fälten töms. Google-data är alltid källa vid omladdning.
 
 Kortens framsida och baksida byggs från samma SVG-funktion i preview och export. QR-koden innehåller rättens M-ID. Valideringen stoppar export när ingredienslistan eller instruktionen inte ryms och visar varningar för lång titel eller saknad bild. Personspecifik och fast mängd behålls mellan portionstalen; proportionell mängd skalas och `Hela enheter` avrundas uppåt.
+
+## Tryckprofiler
+
+Standard är **MakePlayingCards - 63 × 88 mm**: 3,175 mm bleed utanför trim och 3,175 mm safe area innanför trim, 300 DPI och 822 × 1122 px. Detta följer [MPC:s beskrivning av bleed och safe area](https://www.makeplayingcards.com/design/custom-blank-card.html) och deras [minsta bildstorlek för pokerkort](https://www.makeplayingcards.com/faq-photo.aspx). I **Inställningar → Tryckprofil** kan du välja standarden eller skapa **Egen profil** genom att ändra namn, trimstorlek, bleed, safe area, DPI och exportpixlar. Egna profiler sparas endast i webbläsaren och påverkar inte Google Sheet. Exportpixlar måste räcka för de fysiska måtten och vald DPI. På standardprofilen används MPC:s högre minimum.
+
+Slutlig tryckexport innehåller aldrig tryckzoner eller skärlinjer. Med **Visa tryckzoner** av visar förhandsvisningen kortet beskuret vid trim, som färdig produkt. Med läget på visas hela exportytan inklusive bleed och markeringar. Preview-PNG sparar eller kopierar just det läget. Matbilden och bakgrunderna täcker hela exportytan. Textpanelen, texten och QR-rutan på framsidan placeras innanför safe area.
 
 Källkoden finns på [github.com/Clox/matrik](https://github.com/Clox/matrik) och den lokala projektmappen heter `matrik`. En lokal kompatibilitetslänk från den tidigare sökvägen `matrika` kan finnas kvar för äldre verktygsinställningar. Google Cloud-projektets tekniska ID `matrika-514800` är oföränderligt; dess visningsnamn och OAuth-appens namn är Matrik.
 
