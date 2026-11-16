@@ -587,7 +587,12 @@ function PreparationEditor({ preparations, options, hasPreparations, update }) {
 }
 function App() {
   const [status, setStatus] = useState(null),
-    [catalog, setCatalog] = useState(null),
+    [statusError, setStatusError] = useState(null),
+    [catalogRequest, setCatalogRequest] = useState({
+      phase: "loading",
+      data: null,
+      error: null,
+    }),
     [selected, setSelected] = useState(null),
     [draft, setDraft] = useState(null),
     [preview, setPreview] = useState(null),
@@ -596,6 +601,7 @@ function App() {
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false),
     [showSettings, setShowSettings] = useState(false);
+  const catalog = catalogRequest.data;
   const [frontStyle, setFrontStyle] = useState(() => {
     try {
       const saved = localStorage.getItem("matrik.settings.frontStyle");
@@ -610,12 +616,35 @@ function App() {
     } catch {}
   }, [frontStyle]);
   const load = async () => {
-    const state = await json("/api/status");
-    setStatus(state);
-    if (state.authenticated) setCatalog(await json("/api/catalog"));
+    setStatusError(null);
+    setCatalogRequest((current) => ({
+      ...current,
+      phase: "loading",
+      error: null,
+    }));
+    let state;
+    try {
+      state = await json("/api/status");
+      setStatus(state);
+    } catch (error) {
+      setStatusError(error.message);
+      return;
+    }
+    if (!state.configured || !state.authenticated) {
+      setCatalogRequest({ phase: "success", data: null, error: null });
+      return;
+    }
+    try {
+      const data = await json("/api/catalog");
+      if (!Array.isArray(data.recipes))
+        throw new Error("Receptregistret gav ett ogiltigt svar.");
+      setCatalogRequest({ phase: "success", data, error: null });
+    } catch (error) {
+      setCatalogRequest({ phase: "error", data: null, error: error.message });
+    }
   };
   useEffect(() => {
-    load().catch((error) => setMessage(error.message));
+    load();
   }, []);
   useEffect(() => {
     if (!selected || !catalog) return;
@@ -676,7 +705,12 @@ function App() {
         },
         body: JSON.stringify(payload),
       });
-      setCatalog(await json("/api/catalog"));
+      const updatedCatalog = await json("/api/catalog");
+      setCatalogRequest({
+        phase: "success",
+        data: updatedCatalog,
+        error: null,
+      });
       setMessage("Sparat i Google Sheets.");
     } catch (error) {
       setMessage(error.message);
@@ -712,7 +746,24 @@ function App() {
       setMessage(error.message);
     }
   };
-  if (!status) return <div className="loading">Öppnar Matrik…</div>;
+  if (statusError)
+    return (
+      <main className="welcome">
+        <h1>Kunde inte ansluta till Matrik</h1>
+        <div className="notice" role="alert">
+          {statusError}
+        </div>
+        <button className="secondary" onClick={load}>
+          Försök igen
+        </button>
+      </main>
+    );
+  if (!status)
+    return (
+      <main className="loading" role="status">
+        Hämtar recept…
+      </main>
+    );
   if (!status.configured || !status.authenticated)
     return (
       <div className="welcome">
@@ -738,23 +789,26 @@ function App() {
         {message && <div className="notice">{message}</div>}
       </div>
     );
-  if (!catalog)
+  if (catalogRequest.phase === "loading")
     return (
-      <div className="welcome">
+      <main className="loading" role="status">
+        Hämtar recept…
+      </main>
+    );
+  if (catalogRequest.phase === "error")
+    return (
+      <main className="welcome">
         <h1>Kunde inte läsa receptregistret</h1>
-        <div className="notice">
-          {message || "Kontrollerar anslutningen till Google Sheets…"}
+        <div className="notice" role="alert">
+          {catalogRequest.error}
         </div>
-        <button
-          className="secondary"
-          onClick={() => load().catch((error) => setMessage(error.message))}
-        >
+        <button className="secondary" onClick={load}>
           Försök igen
         </button>{" "}
         <a className="primary" href="/auth/login">
           Logga in igen
         </a>
-      </div>
+      </main>
     );
   return (
     <div className="app">
@@ -822,9 +876,7 @@ function App() {
             ⚙ Inställningar
           </button>
           <div className="sidebar-footer-actions">
-            <button onClick={() => load().catch((e) => setMessage(e.message))}>
-              ↻ Synka från Google
-            </button>
+            <button onClick={load}>↻ Synka från Google</button>
             <button
               onClick={async () => {
                 await json("/auth/logout", {
