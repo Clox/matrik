@@ -10,14 +10,14 @@ Kräver Node.js 22 eller senare och ett Google-konto med åtkomst till receptark
 2. Konfigurera OAuth consent screen. Vid testläge: lägg till ditt Google-konto som testanvändare.
 3. Skapa en OAuth-klient av typen **Web application**. Lägg till exakt `http://127.0.0.1:4173/auth/callback` som authorized redirect URI. Google accepterar loopback för lokal utveckling.
 4. Kopiera `.env.example` till `.env`. Fyll i `GOOGLE_SPREADSHEET_ID` och `GOOGLE_DRIVE_FOLDER_ID` från adresserna till ditt ark och din bildmapp. Fyll i `GOOGLE_CLIENT_ID` och `GOOGLE_CLIENT_SECRET`. Alternativt kan du lägga nedladdad OAuth JSON i `credentials/` och ange dess absoluta sökväg med `GOOGLE_CREDENTIALS_FILE`.
-5. Kör:
+5. Kör första gången:
 
 ```bash
 npm install
-npm run dev
+./start-matrik.sh
 ```
 
-Öppna Vite-adressen som visas i terminalen (normalt `http://127.0.0.1:5173`), välj **Logga in med Google** och godkänn Sheets/Drive-åtkomst. Om 5173 används väljer Vite nästa lediga port. API-servern körs bara på `127.0.0.1:4173`. För en färdig lokal byggning: `npm run build && npm start`, öppna sedan `http://127.0.0.1:4173`.
+Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet startar servern och öppnar rätt adress i webbläsaren. Om Matrik redan körs öppnar det den befintliga sidan. Avsluta en server som skriptet startat med Ctrl+C i terminalen. Välj **Logga in med Google** och godkänn Sheets/Drive-åtkomst vid första starten. Om port 5173 används väljer Vite nästa lediga port. API-servern körs bara på `127.0.0.1:4173`. Du kan fortfarande använda `npm run dev` om du vill starta utan att öppna webbläsaren. För en färdig lokal byggning: `npm run build && npm start`, öppna sedan `http://127.0.0.1:4173`.
 
 ## Första kontrollen med M007
 
