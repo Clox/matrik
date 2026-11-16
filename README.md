@@ -24,7 +24,7 @@ Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet s
 1. Öppna **M007 Tacos** i receptlistan. Kontrollera att namn, recept och de relationella ingredienserna kommer från Sheet.
 2. Ändra exempelvis kortnamn eller en mängd. Båda kortsidorna uppdateras cirka 600 ms efter sista ändringen utan export eller Google-skrivning.
    Klicka på en kortsida för att se den större. I den förstorade vyn kan du växla mellan fram- och baksida och stänga med Escape.
-   Jämför de tre framsidorna: semitransparent panel, text på bilden och svag lokal toning. Den valda varianten används också i PNG- och PDF-export och sparas i webbläsaren, utan ny kolumn i Google Sheet.
+   Under **Inställningar** i sidomenyn kan du jämföra de tre framsidorna: semitransparent panel, text på bilden och svag lokal toning. Semitransparent panel är standardvalet. Inställningen gäller alla rätter, används också i PNG- och PDF-export och sparas i webbläsaren, utan ny kolumn i Google Sheet.
 3. Välj **Spara i Sheet**. Läs om sidan eller kontrollera Google Sheet för att se att ändringen finns kvar.
 4. Lägg till en förberedelse, fyll i typ, ledtid, tidpunktstyp och instruktion och spara. Kontrollera att en ny rad med M007 finns i `Rätt-förberedelser`. Testa även att ändra, inaktivera och ta bort raden. `Har förberedelser` i `Rätter` är en beräknad hjälpkolumn och uppdateras av Sheet när en aktiv förberedelse finns.
 5. Exportera framsida, baksida eller A4 proof. PNG är 815 × 1110 px (69 × 94 mm vid 300 dpi). A4 proof placerar korten i faktisk fysisk storlek; skriv ut i 100 %, utan sidanspassning.

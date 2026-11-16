@@ -43,41 +43,36 @@ function toDataUrl(blob) {
     reader.readAsDataURL(blob);
   });
 }
-function Preview({ recipe, frontStyle, onFrontStyleChange }) {
+function Preview({ recipe, frontStyle }) {
   const issues = useMemo(() => validateCard(recipe), [recipe]);
   const cards = useMemo(
     () => ({
-      front: Object.fromEntries(
-        FRONT_STYLES.map((style) => [
-          style.id,
-          renderCard(recipe, "front", { frontStyle: style.id }),
-        ]),
-      ),
+      front: renderCard(recipe, "front", { frontStyle }),
       back: renderCard(recipe, "back"),
     }),
-    [recipe],
+    [recipe, frontStyle],
   );
   const [expandedSide, setExpandedSide] = useState(null);
-  const visibleCard =
-    expandedSide === "front" ? cards.front[frontStyle] : cards.back;
+  const visibleCard = expandedSide === "front" ? cards.front : cards.back;
   const dialogRef = useRef(null);
   const closeRef = useRef(null);
   useEffect(() => {
     if (!expandedSide) return;
     const previousFocus = document.activeElement;
     const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setExpandedSide(null);
+    };
     document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
     closeRef.current?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
       previousFocus?.focus?.();
     };
   }, [Boolean(expandedSide)]);
   const dialogKeyDown = (event) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      setExpandedSide(null);
-    }
     if (event.key !== "Tab") return;
     const buttons = [...dialogRef.current.querySelectorAll("button")];
     const first = buttons[0];
@@ -109,7 +104,7 @@ function Preview({ recipe, frontStyle, onFrontStyleChange }) {
           >
             <span
               className="card"
-              dangerouslySetInnerHTML={{ __html: cards.front[frontStyle] }}
+              dangerouslySetInnerHTML={{ __html: cards.front }}
             />
           </button>
           <p>Framsida</p>
@@ -127,30 +122,6 @@ function Preview({ recipe, frontStyle, onFrontStyleChange }) {
             />
           </button>
           <p>Baksida · 4 / 6 / 8 portioner</p>
-        </div>
-      </div>
-      <div className="front-compare">
-        <div className="front-compare-heading">
-          <strong>Jämför framsidor</strong>
-          <span>Vald variant används i PNG och PDF</span>
-        </div>
-        <div className="front-compare-options">
-          {FRONT_STYLES.map((style) => (
-            <button
-              type="button"
-              className={`front-compare-option ${frontStyle === style.id ? "selected" : ""}`}
-              key={style.id}
-              aria-pressed={frontStyle === style.id}
-              onClick={() => onFrontStyleChange(style.id)}
-            >
-              <span
-                className="front-compare-thumb"
-                dangerouslySetInnerHTML={{ __html: cards.front[style.id] }}
-              />
-              <strong>{style.label}</strong>
-              <small>{style.description}</small>
-            </button>
-          ))}
         </div>
       </div>
       {expandedSide &&
@@ -204,24 +175,6 @@ function Preview({ recipe, frontStyle, onFrontStyleChange }) {
                   Baksida
                 </button>
               </div>
-              {expandedSide === "front" && (
-                <div
-                  className="card-dialog-styles"
-                  aria-label="Välj framsidesvariant"
-                >
-                  {FRONT_STYLES.map((style) => (
-                    <button
-                      type="button"
-                      key={style.id}
-                      className={frontStyle === style.id ? "selected" : ""}
-                      aria-pressed={frontStyle === style.id}
-                      onClick={() => onFrontStyleChange(style.id)}
-                    >
-                      {style.label}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div
                 className="card-dialog-image"
                 dangerouslySetInnerHTML={{ __html: visibleCard }}
@@ -242,6 +195,95 @@ function Preview({ recipe, frontStyle, onFrontStyleChange }) {
           <p className="ok">● Kortet ryms i mallen.</p>
         )}
       </div>
+    </div>
+  );
+}
+function Settings({
+  frontStyle,
+  onFrontStyleChange,
+  recipe,
+  onBack,
+  backLabel,
+}) {
+  const [loadedImage, setLoadedImage] = useState(null);
+  const recipeId = recipe?.id;
+  const hasImage = Boolean(recipe?.imageDataUrl);
+  useEffect(() => {
+    if (!recipeId || hasImage) return;
+    let active = true;
+    fetch(`/api/recipes/${encodeURIComponent(recipeId)}/image`)
+      .then((response) => (response.ok ? response.blob() : null))
+      .then((blob) => blob && toDataUrl(blob))
+      .then((dataUrl) => {
+        if (active && dataUrl) setLoadedImage({ recipeId, dataUrl });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [recipeId, hasImage]);
+  const cardRecipe =
+    recipe && !hasImage && loadedImage?.recipeId === recipeId
+      ? { ...recipe, imageDataUrl: loadedImage.dataUrl }
+      : recipe;
+  const fronts = useMemo(
+    () =>
+      cardRecipe
+        ? Object.fromEntries(
+            FRONT_STYLES.map((style) => [
+              style.id,
+              renderCard(cardRecipe, "front", { frontStyle: style.id }),
+            ]),
+          )
+        : {},
+    [cardRecipe],
+  );
+  return (
+    <div className="settings-view">
+      <div className="settings-heading">
+        <div>
+          <p className="eyebrow">Matrik</p>
+          <h1>Inställningar</h1>
+        </div>
+        <button type="button" className="secondary" onClick={onBack}>
+          {backLabel}
+        </button>
+      </div>
+      <section
+        className="paper settings-card"
+        aria-labelledby="front-style-heading"
+      >
+        <p className="eyebrow">Kortdesign</p>
+        <h2 id="front-style-heading">Framsidans utseende</h2>
+        <p>
+          Gäller alla rätter och används både i förhandsvisningen och i PNG- och
+          PDF-exporten. Valet sparas i den här webbläsaren.
+        </p>
+        <div
+          className="front-compare-options"
+          role="group"
+          aria-label="Välj framsidesvariant"
+        >
+          {FRONT_STYLES.map((style) => (
+            <button
+              type="button"
+              className={`front-compare-option ${frontStyle === style.id ? "selected" : ""}`}
+              key={style.id}
+              aria-pressed={frontStyle === style.id}
+              onClick={() => onFrontStyleChange(style.id)}
+            >
+              {fronts[style.id] && (
+                <span
+                  className="front-compare-thumb"
+                  dangerouslySetInnerHTML={{ __html: fronts[style.id] }}
+                />
+              )}
+              <strong>{style.label}</strong>
+              <small>{style.description}</small>
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -552,10 +594,11 @@ function App() {
     [search, setSearch] = useState(""),
     [tagFilter, setTagFilter] = useState(""),
     [message, setMessage] = useState(""),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [showSettings, setShowSettings] = useState(false);
   const [frontStyle, setFrontStyle] = useState(() => {
     try {
-      const saved = localStorage.getItem("matrik.frontStyle");
+      const saved = localStorage.getItem("matrik.settings.frontStyle");
       return FRONT_STYLES.some((style) => style.id === saved) ? saved : "panel";
     } catch {
       return "panel";
@@ -563,7 +606,7 @@ function App() {
   });
   useEffect(() => {
     try {
-      localStorage.setItem("matrik.frontStyle", frontStyle);
+      localStorage.setItem("matrik.settings.frontStyle", frontStyle);
     } catch {}
   }, [frontStyle]);
   const load = async () => {
@@ -618,6 +661,7 @@ function App() {
   const selectRecipe = (id) => {
     setMessage("");
     setSelected(id);
+    setShowSettings(false);
   };
   const save = async () => {
     setSaving(true);
@@ -745,7 +789,7 @@ function App() {
           {recipes.map((r) => (
             <button
               key={r.id}
-              className={`recipe-item ${selected === r.id ? "active" : ""}`}
+              className={`recipe-item ${selected === r.id && !showSettings ? "active" : ""}`}
               onClick={() => selectRecipe(r.id)}
             >
               <div className="thumb">
@@ -770,24 +814,46 @@ function App() {
           ))}
         </div>
         <div className="sidebar-footer">
-          <button onClick={() => load().catch((e) => setMessage(e.message))}>
-            ↻ Synka från Google
-          </button>
           <button
-            onClick={async () => {
-              await json("/auth/logout", {
-                method: "POST",
-                headers: { "x-matrik-csrf": status.csrf },
-              });
-              location.reload();
-            }}
+            className={`settings-link ${showSettings ? "active" : ""}`}
+            aria-current={showSettings ? "page" : undefined}
+            onClick={() => setShowSettings(true)}
           >
-            Logga ut
+            ⚙ Inställningar
           </button>
+          <div className="sidebar-footer-actions">
+            <button onClick={() => load().catch((e) => setMessage(e.message))}>
+              ↻ Synka från Google
+            </button>
+            <button
+              onClick={async () => {
+                await json("/auth/logout", {
+                  method: "POST",
+                  headers: { "x-matrik-csrf": status.csrf },
+                });
+                location.reload();
+              }}
+            >
+              Logga ut
+            </button>
+          </div>
         </div>
       </aside>
       <main className="main">
-        {!draft ? (
+        {showSettings ? (
+          <Settings
+            frontStyle={frontStyle}
+            onFrontStyleChange={setFrontStyle}
+            recipe={
+              preview ||
+              draft ||
+              catalog.recipes.find((x) => x.id === "M007") ||
+              catalog.recipes[0]
+            }
+            onBack={() => setShowSettings(false)}
+            backLabel={draft ? "Tillbaka till rätten" : "Till recepten"}
+          />
+        ) : !draft ? (
           <div className="empty">
             <p className="eyebrow">Välkommen tillbaka</p>
             <h1>Välj en rätt</h1>
@@ -923,11 +989,7 @@ function App() {
                 />
               </div>
               <div className="right">
-                <Preview
-                  recipe={preview || draft}
-                  frontStyle={frontStyle}
-                  onFrontStyleChange={setFrontStyle}
-                />
+                <Preview recipe={preview || draft} frontStyle={frontStyle} />
                 <div className="export-panel">
                   <p className="eyebrow">Exportera vid behov</p>
                   <h3>Tryckfiler</h3>
