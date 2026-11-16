@@ -134,14 +134,35 @@ export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
     const variant = FRONT_STYLES.some((style) => style.id === frontStyle)
       ? frontStyle
       : "panel";
-    const titleLines = wrap(
+    const titleParts = wrap(
       recipe.shortName || recipe.name || "Namnlös rätt",
       15,
-    )
-      .slice(0, 2)
+    ).slice(0, 2);
+    const panelHasTwoLines = variant === "panel" && titleParts.length > 1;
+    const layout =
+      variant === "panel"
+        ? panelHasTwoLines
+          ? {
+              panelY: 680,
+              panelHeight: recipe.activeTime ? 210 : 170,
+              idY: 716,
+              titleY: 762,
+              titleStep: 48,
+              timeY: 852,
+            }
+          : {
+              panelY: 710,
+              panelHeight: recipe.activeTime ? 155 : 115,
+              idY: 738,
+              titleY: 789,
+              titleStep: 48,
+              timeY: 828,
+            }
+        : { idY: 660, titleY: 728, titleStep: 54, timeY: 850 };
+    const titleLines = titleParts
       .map(
         (line, i) =>
-          `<text x="66" y="${i === 0 ? 728 : 782}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : ""}>${esc(line)}</text>`,
+          `<text x="66" y="${layout.titleY + i * layout.titleStep}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : ""}>${esc(line)}</text>`,
       )
       .join("");
     const textOutline =
@@ -150,11 +171,11 @@ export function renderCard(recipe, side, { frontStyle = "panel" } = {}) {
         : "";
     const textBackground =
       variant === "panel"
-        ? '<rect x="44" y="612" width="384" height="274" rx="16" fill="#14221a" fill-opacity=".54"/>'
+        ? `<rect x="44" y="${layout.panelY}" width="384" height="${layout.panelHeight}" rx="12" fill="#14221a" fill-opacity=".54"/>`
         : variant === "fade"
           ? '<rect x="28" y="590" width="425" height="310" fill="url(#textFade)"/>'
           : "";
-    return `${svgStart}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="690" height="940" fill="url(#bg)"/>${photo}${textBackground}<text x="66" y="660" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="850" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="445" y="705" width="180" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></svg>`;
+    return `${svgStart}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="690" height="940" fill="url(#bg)"/>${photo}${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="445" y="705" width="180" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></svg>`;
   }
   const lines = recipe.ingredients || [];
   const rowHeight = lines.length > 10 ? 31 : 37;

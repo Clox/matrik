@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Receptkort med M">
+  <rect width="64" height="64" rx="14" fill="#21372a"/>
+  <rect x="13" y="8" width="38" height="48" rx="5" fill="#f4f1e9"/>
+  <rect x="19" y="15" width="26" height="3" rx="1.5" fill="#d99b55"/>
+  <path d="M19 44V25h5l8 10 8-10h5v19h-6V34l-7 9-7-9v10z" fill="#21372a"/>
+  <rect x="22" y="48" width="20" height="2" rx="1" fill="#c4cfbf"/>
+</svg>

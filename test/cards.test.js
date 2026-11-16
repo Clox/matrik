@@ -143,7 +143,7 @@ test("framsidesvarianterna behåller bilden utanför textytan", async () => {
       ),
     ];
     assert.deepEqual(pixel(700, 700), sourceColor);
-    samples[style.id] = pixel(120, 800);
+    samples[style.id] = pixel(120, 900);
   }
   assert.deepEqual(samples.direct, sourceColor);
   assert.notDeepEqual(samples.panel, samples.direct);

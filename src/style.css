@@ -69,24 +69,20 @@ h3 {
 .logo {
   display: flex;
   align-items: center;
-  font:
-    700 37px Georgia,
-    serif;
-  gap: 0;
+  gap: 2px;
   padding: 0 13px 26px;
 }
-.logo span,
-.brand span {
-  color: #db9d58;
-  font-size: 27px;
-  margin-left: 2px;
+.logo img {
+  display: block;
+  width: 58px;
+  height: 58px;
+  flex: none;
 }
-.logo small {
+.logo span {
   font:
-    600 15px "DM Sans",
-    sans-serif;
-  margin-left: 11px;
-  letter-spacing: 0.05em;
+    700 36px Georgia,
+    serif;
+  letter-spacing: 0.01em;
 }
 .list-header {
   padding: 0 13px;
@@ -548,11 +544,6 @@ h3 {
   background: white;
   overflow: hidden;
 }
-.card svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
 .card-overlay {
   position: fixed;
   inset: 0;
@@ -621,10 +612,25 @@ h3 {
   background: white;
   box-shadow: 0 9px 28px #1b2c1c44;
 }
-.card-dialog-image svg {
-  display: block;
-  width: 100%;
-  height: 100%;
+.card-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.card-image-actions button {
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 16px;
+  color: white;
+  background: #36503c;
+  font-weight: 700;
+  cursor: pointer;
+}
+.card-copy-message {
+  margin: -8px 0 0;
+  color: #36503c;
+  font-size: 12px;
 }
 .validation {
   border-top: 1px solid #cad4c7;
@@ -695,10 +701,13 @@ h3 {
   padding: 35px;
 }
 .welcome .brand {
-  font:
-    700 72px Georgia,
-    serif;
-  color: #2d4734;
+  margin-bottom: 14px;
+}
+.welcome .brand img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: auto;
 }
 .welcome h1 {
   font-size: 46px;

@@ -23,7 +23,7 @@ Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet s
 
 1. Öppna **M007 Tacos** i receptlistan. Kontrollera att namn, recept och de relationella ingredienserna kommer från Sheet.
 2. Ändra exempelvis kortnamn eller en mängd. Båda kortsidorna uppdateras cirka 600 ms efter sista ändringen utan export eller Google-skrivning.
-   Klicka på en kortsida för att se den större. I den förstorade vyn kan du växla mellan fram- och baksida och stänga med Escape.
+   Klicka på en kortsida för att se den större. I den förstorade vyn kan du växla mellan fram- och baksida och stänga med Escape. Kortet är en riktig SVG-bild som kan sparas via webbläsarens högerklicksmeny. Knapparna **Spara bild som PNG** och **Kopiera bild som PNG** använder den synliga sidan i 815 × 1110 px. Använd PNG-knapparna under **Tryckfiler** för filer som ska tryckas.
    Under **Inställningar** i sidomenyn kan du jämföra de tre framsidorna: semitransparent panel, text på bilden och svag lokal toning. Semitransparent panel är standardvalet. Inställningen gäller alla rätter, används också i PNG- och PDF-export och sparas i webbläsaren, utan ny kolumn i Google Sheet.
 3. Välj **Spara i Sheet**. Läs om sidan eller kontrollera Google Sheet för att se att ändringen finns kvar.
 4. Lägg till en förberedelse, fyll i typ, ledtid, tidpunktstyp och instruktion och spara. Kontrollera att en ny rad med M007 finns i `Rätt-förberedelser`. Testa även att ändra, inaktivera och ta bort raden. `Har förberedelser` i `Rätter` är en beräknad hjälpkolumn och uppdateras av Sheet när en aktiv förberedelse finns.
@@ -41,6 +41,8 @@ Sparning använder en revisionskontroll. Om någon ändrat rätten i Sheet sedan
 Kortens framsida och baksida byggs från samma SVG-funktion i preview och export. QR-koden innehåller rättens M-ID. Valideringen stoppar export när ingredienslistan eller instruktionen inte ryms och visar varningar för lång titel eller saknad bild. Personspecifik och fast mängd behålls mellan portionstalen; proportionell mängd skalas och `Hela enheter` avrundas uppåt.
 
 Källkoden finns på [github.com/Clox/matrik](https://github.com/Clox/matrik) och den lokala projektmappen heter `matrik`. En lokal kompatibilitetslänk från den tidigare sökvägen `matrika` kan finnas kvar för äldre verktygsinställningar. Google Cloud-projektets tekniska ID `matrika-514800` är oföränderligt; dess visningsnamn och OAuth-appens namn är Matrik.
+
+Tallriksikonen används som favicon (`public/favicon.svg`) och som större märke i appen (`public/brand-mark.svg`). De tidigare ikonförslagen kan jämföras på `/favicon-ideas.html` när appen körs lokalt.
 
 ## Säkerhet och lokal data
 

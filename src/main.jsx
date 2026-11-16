@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
+import {
+  CARD,
+  FRONT_STYLES,
+  renderCard,
+  validateCard,
+} from "../shared/cards.js";
 import "./style.css";
 
 async function json(url, options = {}) {
@@ -43,6 +48,48 @@ function toDataUrl(blob) {
     reader.readAsDataURL(blob);
   });
 }
+function useCardImageUrls(cards) {
+  const urls = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(cards).map(([side, svg]) => [
+          side,
+          URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })),
+        ]),
+      ),
+    [cards],
+  );
+  useEffect(() => {
+    return () => Object.values(urls).forEach(URL.revokeObjectURL);
+  }, [urls]);
+  return urls;
+}
+function cardPng(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = CARD.widthPx;
+        canvas.height = CARD.heightPx;
+        canvas
+          .getContext("2d")
+          .drawImage(image, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(new Error("Kunde inte skapa PNG-bilden.")),
+          "image/png",
+        );
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error("Kunde inte läsa kortbilden."));
+    image.src = url;
+  });
+}
 function Preview({ recipe, frontStyle }) {
   const issues = useMemo(() => validateCard(recipe), [recipe]);
   const cards = useMemo(
@@ -52,8 +99,39 @@ function Preview({ recipe, frontStyle }) {
     }),
     [recipe, frontStyle],
   );
+  const cardUrls = useCardImageUrls(cards);
   const [expandedSide, setExpandedSide] = useState(null);
-  const visibleCard = expandedSide === "front" ? cards.front : cards.back;
+  const [copyMessage, setCopyMessage] = useState("");
+  const saveCard = async () => {
+    try {
+      const url = URL.createObjectURL(await cardPng(cardUrls[expandedSide]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${recipe.id}-${expandedSide}.png`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setCopyMessage("PNG-bilden har sparats.");
+    } catch (error) {
+      setCopyMessage(`Kunde inte spara bilden: ${error.message}`);
+    }
+  };
+  const copyCard = async () => {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      setCopyMessage(
+        "Bildkopiering stöds inte i den här webbläsaren. Använd PNG-knappen under Tryckfiler.",
+      );
+      return;
+    }
+    try {
+      const png = cardPng(cardUrls[expandedSide]);
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": png }),
+      ]);
+      setCopyMessage("Kortbilden har kopierats som PNG.");
+    } catch (error) {
+      setCopyMessage(`Kunde inte kopiera bilden: ${error.message}`);
+    }
+  };
   const dialogRef = useRef(null);
   const closeRef = useRef(null);
   useEffect(() => {
@@ -102,10 +180,7 @@ function Preview({ recipe, frontStyle }) {
             aria-label="Visa framsidan större"
             onClick={() => setExpandedSide("front")}
           >
-            <span
-              className="card"
-              dangerouslySetInnerHTML={{ __html: cards.front }}
-            />
+            <img className="card" src={cardUrls.front} alt="Kortets framsida" />
           </button>
           <p>Framsida</p>
         </div>
@@ -116,10 +191,7 @@ function Preview({ recipe, frontStyle }) {
             aria-label="Visa baksidan större"
             onClick={() => setExpandedSide("back")}
           >
-            <span
-              className="card"
-              dangerouslySetInnerHTML={{ __html: cards.back }}
-            />
+            <img className="card" src={cardUrls.back} alt="Kortets baksida" />
           </button>
           <p>Baksida · 4 / 6 / 8 portioner</p>
         </div>
@@ -162,7 +234,10 @@ function Preview({ recipe, frontStyle }) {
                   type="button"
                   className={expandedSide === "front" ? "selected" : ""}
                   aria-pressed={expandedSide === "front"}
-                  onClick={() => setExpandedSide("front")}
+                  onClick={() => {
+                    setExpandedSide("front");
+                    setCopyMessage("");
+                  }}
                 >
                   Framsida
                 </button>
@@ -170,15 +245,32 @@ function Preview({ recipe, frontStyle }) {
                   type="button"
                   className={expandedSide === "back" ? "selected" : ""}
                   aria-pressed={expandedSide === "back"}
-                  onClick={() => setExpandedSide("back")}
+                  onClick={() => {
+                    setExpandedSide("back");
+                    setCopyMessage("");
+                  }}
                 >
                   Baksida
                 </button>
               </div>
-              <div
+              <img
                 className="card-dialog-image"
-                dangerouslySetInnerHTML={{ __html: visibleCard }}
+                src={cardUrls[expandedSide]}
+                alt={`Kortets ${expandedSide === "front" ? "framsida" : "baksida"}`}
               />
+              <div className="card-image-actions">
+                <button type="button" onClick={saveCard}>
+                  Spara bild som PNG
+                </button>
+                <button type="button" onClick={copyCard}>
+                  Kopiera bild som PNG
+                </button>
+              </div>
+              {copyMessage && (
+                <p className="card-copy-message" role="status">
+                  {copyMessage}
+                </p>
+              )}
             </div>
           </div>,
           document.body,
@@ -768,7 +860,7 @@ function App() {
     return (
       <div className="welcome">
         <div className="brand">
-          M<span>✳</span>
+          <img src="/brand-mark.svg" alt="" />
         </div>
         <p className="eyebrow">Familjens receptregister</p>
         <h1>Matrik</h1>
@@ -813,9 +905,9 @@ function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="logo">
-          M<span>✳</span>
-          <small>Matrik</small>
+        <div className="logo" aria-label="Matrik">
+          <img src="/brand-mark.svg" alt="" />
+          <span aria-hidden="true">atrik</span>
         </div>
         <div className="list-header">
           <p className="eyebrow">Receptregister</p>

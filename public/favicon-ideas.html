@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Favicon-förslag · Matrik</title>
+    <link id="tab-icon" rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        font-family: Arial, sans-serif;
+        color: #21372a;
+        background: #f4f1e9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 48px 24px 72px;
+      }
+      h1 {
+        font:
+          700 clamp(32px, 5vw, 54px) Georgia,
+          serif;
+        letter-spacing: -0.04em;
+        margin: 8px 0 12px;
+      }
+      p {
+        line-height: 1.5;
+      }
+      .eyebrow {
+        color: #8a967d;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+      .intro {
+        max-width: 670px;
+        color: #566b59;
+        margin: 0 0 30px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .option {
+        border: 2px solid #d8dfd3;
+        border-radius: 18px;
+        background: #fffdf8;
+        padding: 22px;
+      }
+      .option.selected {
+        border-color: #b86d42;
+        box-shadow: 0 0 0 3px #b86d4222;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .hero {
+        width: 104px;
+        height: 104px;
+        flex: none;
+        filter: drop-shadow(0 8px 14px #16291b2b);
+      }
+      h2 {
+        font:
+          700 24px Georgia,
+          serif;
+        margin: 0 0 6px;
+      }
+      .description {
+        color: #566b59;
+        margin: 0;
+        font-size: 14px;
+      }
+      .sizes {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 22px;
+        padding: 14px;
+        border-radius: 10px;
+        background: #eff2eb;
+      }
+      .sizes img {
+        object-fit: contain;
+        flex: none;
+      }
+      .sizes span {
+        margin-left: auto;
+        color: #6c806e;
+        font-size: 12px;
+      }
+      .dark {
+        background: #21372a;
+      }
+      .dark span {
+        color: #cbd9ca;
+      }
+      button {
+        margin-top: 18px;
+        padding: 11px 16px;
+        border: 0;
+        border-radius: 8px;
+        background: #21372a;
+        color: white;
+        font:
+          700 13px Arial,
+          sans-serif;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #36503c;
+      }
+      .note {
+        color: #6c806e;
+        font-size: 13px;
+        margin-top: 30px;
+      }
+      @media (max-width: 700px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        body {
+          padding: 32px 16px 50px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <p class="eyebrow">Matrik · designstudie</p>
+    <h1>Fyra favicon-förslag</h1>
+    <p class="intro">
+      Jämför hur märkena fungerar som stora symboler och som små flikikoner.
+      Klicka på en variant för att prova den i just den här webbläsarfliken.
+      Tallriken är nu vald som Matrik-ikon.
+    </p>
+    <main class="grid">
+      <section class="option selected">
+        <div class="top">
+          <img class="hero" src="/favicon.svg" alt="M på en tallrik" />
+          <div>
+            <h2>1 · Tallriken</h2>
+            <p class="description">
+              Ett tydligt M mitt på en tallrik. Närmast din ursprungliga idé.
+            </p>
+          </div>
+        </div>
+        <div class="sizes">
+          <img src="/favicon.svg" width="32" height="32" alt="" /><img
+            src="/favicon.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>32 px · 16 px</span>
+        </div>
+        <div class="sizes dark">
+          <img src="/favicon.svg" width="32" height="32" alt="" /><img
+            src="/favicon.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>Mörk flik</span>
+        </div>
+        <button type="button" data-icon="plate" aria-pressed="true">
+          Visa i fliken
+        </button>
+      </section>
+      <section class="option">
+        <div class="top">
+          <img
+            class="hero"
+            src="/favicon-options/monogram.svg"
+            alt="M som monogram"
+          />
+          <div>
+            <h2>2 · Monogrammet</h2>
+            <p class="description">Ett kraftigt M utan extra symboler.</p>
+          </div>
+        </div>
+        <div class="sizes">
+          <img
+            src="/favicon-options/monogram.svg"
+            width="32"
+            height="32"
+            alt=""
+          /><img
+            src="/favicon-options/monogram.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>32 px · 16 px</span>
+        </div>
+        <div class="sizes dark">
+          <img
+            src="/favicon-options/monogram.svg"
+            width="32"
+            height="32"
+            alt=""
+          /><img
+            src="/favicon-options/monogram.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>Mörk flik</span>
+        </div>
+        <button type="button" data-icon="monogram" aria-pressed="false">
+          Visa i fliken
+        </button>
+      </section>
+      <section class="option">
+        <div class="top">
+          <img
+            class="hero"
+            src="/favicon-options/recipe-card.svg"
+            alt="Receptkort med M"
+          />
+          <div>
+            <h2>3 · Kortet</h2>
+            <p class="description">
+              Ett litet tryckt receptkort med M. Knyter ikonen till korten du
+              skapar.
+            </p>
+          </div>
+        </div>
+        <div class="sizes">
+          <img
+            src="/favicon-options/recipe-card.svg"
+            width="32"
+            height="32"
+            alt=""
+          /><img
+            src="/favicon-options/recipe-card.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>32 px · 16 px</span>
+        </div>
+        <div class="sizes dark">
+          <img
+            src="/favicon-options/recipe-card.svg"
+            width="32"
+            height="32"
+            alt=""
+          /><img
+            src="/favicon-options/recipe-card.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>Mörk flik</span>
+        </div>
+        <button type="button" data-icon="recipe-card" aria-pressed="false">
+          Visa i fliken
+        </button>
+      </section>
+      <section class="option">
+        <div class="top">
+          <img
+            class="hero"
+            src="/favicon-options/pasta.svg"
+            alt="M som en pastaslinga"
+          />
+          <div>
+            <h2>4 · Pastan</h2>
+            <p class="description">
+              Ett mjukt M som liknar en pastaslinga, med ett litet grönt blad.
+            </p>
+          </div>
+        </div>
+        <div class="sizes">
+          <img
+            src="/favicon-options/pasta.svg"
+            width="32"
+            height="32"
+            alt=""
+          /><img
+            src="/favicon-options/pasta.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>32 px · 16 px</span>
+        </div>
+        <div class="sizes dark">
+          <img
+            src="/favicon-options/pasta.svg"
+            width="32"
+            height="32"
+            alt=""
+          /><img
+            src="/favicon-options/pasta.svg"
+            width="16"
+            height="16"
+            alt=""
+          /><span>Mörk flik</span>
+        </div>
+        <button type="button" data-icon="pasta" aria-pressed="false">
+          Visa i fliken
+        </button>
+      </section>
+    </main>
+    <p class="note">
+      Alla fyra är lokala SVG-filer. Förslagen innehåller inga recept eller
+      bilder från Google Drive.
+    </p>
+    <script>
+      document.querySelectorAll("button[data-icon]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelector("#tab-icon").href =
+            button.dataset.icon === "plate"
+              ? "/favicon.svg"
+              : `/favicon-options/${button.dataset.icon}.svg`;
+          document.querySelectorAll(".option").forEach((option) => {
+            const selected = option.contains(button);
+            option.classList.toggle("selected", selected);
+            option
+              .querySelector("button")
+              .setAttribute("aria-pressed", String(selected));
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
