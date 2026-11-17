@@ -167,9 +167,12 @@ export function renderCard(
     const variant = FRONT_STYLES.some((style) => style.id === frontStyle)
       ? frontStyle
       : "panel";
-    const titleParts = wrap(
-      recipe.shortName || recipe.name || "Namnlös rätt",
-      variant === "panel" ? 12 : 15,
+    const frontTitle = recipe.shortName || recipe.name || "Namnlös rätt";
+    const compactTitleParts = wrap(frontTitle, variant === "panel" ? 12 : 15);
+    const titleParts = (
+      variant === "panel" && compactTitleParts.length > 2
+        ? wrap(frontTitle, 16)
+        : compactTitleParts
     ).slice(0, 2);
     const panelHasTwoLines = variant === "panel" && titleParts.length > 1;
     const layout =

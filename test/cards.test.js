@@ -174,6 +174,14 @@ test("lång korttitel bryts innan den når QR-rutan", () => {
   assert.match(svg, />med pommes<\/text>/);
   assert.doesNotMatch(svg, />Hamburgare med<\/text>/);
 });
+test("hela kortnamnet visas även när två smala rader inte räcker", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  recipe.id = "M002";
+  recipe.shortName = "Fläskkarré med klyftpotatis";
+  const svg = renderCard(recipe, "front");
+  assert.match(svg, />Fläskkarré med<\/text>/);
+  assert.match(svg, />klyftpotatis<\/text>/);
+});
 test("previewns tryckzoner är en separat bild och följer valt PNG-läge", () => {
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
   const clean = previewDimensions(profile, false);
