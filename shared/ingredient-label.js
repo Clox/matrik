@@ -27,15 +27,13 @@ export function ingredientDisplayName(line) {
 
 export function grammaticalUnit(unit, quantity) {
   const text = String(unit || "");
-  if (text.toLowerCase() === "burk" && Number(quantity) !== 1)
-    return "burkar";
+  if (text.toLowerCase() === "burk" && Number(quantity) !== 1) return "burkar";
   return text;
 }
 
 export function cardUnit(line, quantities) {
   const unit = String(line.unit || "");
-  if (unit.toLowerCase() === "kit" && /kit/i.test(line.name || ""))
-    return "";
+  if (unit.toLowerCase() === "kit" && /kit/i.test(line.name || "")) return "";
   if (
     unit.toLowerCase() === "burk" &&
     quantities.every((quantity) => Number(quantity) > 1)
@@ -52,7 +50,16 @@ export function ingredientListLine(line) {
   const repeatedKit =
     String(line.unit || "").toLowerCase() === "kit" &&
     /kit/i.test(line.name || "");
-  const unit = repeatedKit ? "" : `${grammaticalUnit(line.unit, line.quantity)} `;
+  const singleCarrot =
+    String(line.name || "").toLocaleLowerCase("sv-SE") === "morötter" &&
+    String(line.unit || "").toLocaleLowerCase("sv-SE") === "st" &&
+    Number(line.quantity) === 1 &&
+    !String(line.note || "").includes("Alternativ:");
+  if (singleCarrot)
+    return `1 morot${line.required === false ? " (valfri)" : ""}${line.note ? ` – ${line.note}` : ""}`;
+  const unit = repeatedKit
+    ? ""
+    : `${grammaticalUnit(line.unit, line.quantity)} `;
   const name = label.charAt(0).toLocaleLowerCase("sv-SE") + label.slice(1);
   return `${line.quantity} ${unit}${name}${line.note ? ` – ${line.note}` : ""}`;
 }

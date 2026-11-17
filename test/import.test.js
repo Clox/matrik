@@ -345,6 +345,10 @@ test("alternativ syns på kortet medan mängd och skalning fortsätter gälla ka
     "2 burkar färdig currysås",
   );
   assert.equal(
+    ingredientListLine({ name: "Morötter", quantity: 1, unit: "st" }),
+    "1 morot",
+  );
+  assert.equal(
     ingredientListLine({
       name: "Pizzakit med deg och tomatsås",
       quantity: 2,
