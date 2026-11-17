@@ -261,9 +261,25 @@ test("framsidesvarianterna behåller bilden utanför textytan", async () => {
 });
 test("layoutfel rapporteras före export", () => {
   const recipe = makeCatalog(fixture).recipes[0];
-  recipe.ingredients = Array.from({ length: 15 }, (_, i) => ({
+  recipe.ingredients = Array.from({ length: 16 }, (_, i) => ({
     name: `Rad ${i}`,
     quantity: 1,
   }));
   assert.ok(validateCard(recipe).some((issue) => issue.level === "error"));
+});
+
+test("femton korta ingrediensrader ryms med ett kompakt Kortrecept", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  recipe.shortName = "Köttfärslimpa";
+  recipe.cardRecipe =
+    "Forma limpan. Grädda tills genomstekt. Koka potatis och gör sås.";
+  recipe.ingredients = Array.from({ length: 15 }, (_, i) => ({
+    name: `Ingrediens ${i + 1}`,
+    quantity: 1,
+    unit: "st",
+  }));
+  assert.equal(
+    validateCard(recipe).filter((issue) => issue.level === "error").length,
+    0,
+  );
 });

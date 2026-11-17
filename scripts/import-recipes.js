@@ -1,8 +1,10 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { google } from "googleapis";
 import { authClient, loadCatalog } from "../server/google.js";
+import { copyFormulaToRow } from "../shared/formula-plan.js";
 import {
   buildImportPlan,
   planMarkdown,
@@ -35,28 +37,6 @@ const source = JSON.parse(fs.readFileSync(absoluteInput, "utf8"));
 const auth = authClient();
 const catalog = await loadCatalog(auth);
 const plan = buildImportPlan(catalog, source);
-const outputDirectory = path.resolve(".local/import/reports");
-fs.mkdirSync(outputDirectory, { recursive: true, mode: 0o700 });
-const reportPath = path.join(outputDirectory, `${plan.hash}.md`);
-fs.writeFileSync(reportPath, planMarkdown(plan), { mode: 0o600 });
-fs.chmodSync(reportPath, 0o600);
-const recipesPath = path.join(outputDirectory, `${plan.hash}-recipes.md`);
-fs.writeFileSync(recipesPath, proposalMarkdown(source, plan), { mode: 0o600 });
-fs.chmodSync(recipesPath, 0o600);
-console.log(
-  `Plan ${plan.hash}: ${plan.assignments.length} rätter, ${plan.changes.length} celländringar, ${plan.conflicts.length} konflikter, ${plan.warnings.length} varningar.`,
-);
-console.log(`Fullständig dry-run: ${reportPath}`);
-console.log(`Recept att granska: ${recipesPath}`);
-if (plan.conflicts.length) process.exit(mode === "dry-run" ? 1 : 2);
-if (mode === "apply" && plan.hash !== confirmedHash)
-  throw new Error(
-    "Arket eller förslagen har ändrats sedan godkänd dry-run. Kör ny dry-run.",
-  );
-if (mode === "apply" && !plan.changes.length) {
-  console.log("Inga ändringar att importera.");
-  process.exit(0);
-}
 
 const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
 const sheets = google.sheets({ version: "v4", auth });
@@ -81,7 +61,10 @@ const newLinkRows = new Set(
 );
 const grid = await sheets.spreadsheets.get({
   spreadsheetId,
-  ranges: ["'Rätter'!L2:L1000", "'Rätt-ingredienser'!G2:I991"],
+  ranges: [
+    `'Rätter'!L2:L${Math.max(1000, ...newDishRows)}`,
+    `'Rätt-ingredienser'!G2:I${Math.max(991, ...newLinkRows)}`,
+  ],
   includeGridData: true,
   fields:
     "sheets(properties(title,gridProperties),data(startRow,startColumn,rowData(values(userEnteredValue))))",
@@ -105,21 +88,55 @@ for (const [title, rows, firstColumn, width] of [
 ]) {
   const sheet = byTitle[title];
   const data = sheet?.data?.[0];
-  for (const row of rows) {
+  const formulaAt = (row, column) =>
+    data?.rowData?.[row - 1 - (data.startRow || 0)]?.values?.[
+      column - (data.startColumn || 0)
+    ]?.userEnteredValue?.formulaValue;
+  const planned = new Map();
+  for (const row of [...rows].sort((a, b) => a - b)) {
     if (row > sizes[title]?.rowCount)
       throw new Error(
         `${title} saknar rad ${row}; importen stoppas utan ändringar.`,
       );
-    const values =
-      data?.rowData?.[row - 1 - (data.startRow || 0)]?.values || [];
     for (let column = 0; column < width; column++) {
-      if (
-        !values[firstColumn + column - (data.startColumn || 0)]
-          ?.userEnteredValue?.formulaValue
-      )
+      const absoluteColumn = firstColumn + column;
+      if (formulaAt(row, absoluteColumn)) continue;
+      const entered =
+        data?.rowData?.[row - 1 - (data.startRow || 0)]?.values?.[
+          absoluteColumn - (data.startColumn || 0)
+        ]?.userEnteredValue;
+      if (entered)
         throw new Error(
-          `${title} rad ${row} saknar förväntad formel; importen stoppas utan ändringar.`,
+          `${title} rad ${row} har ett värde där en formel krävs; importen stoppas.`,
         );
+      let templateRow = row - 1;
+      while (
+        templateRow > 1 &&
+        !formulaAt(templateRow, absoluteColumn) &&
+        !planned.has(`${templateRow}:${absoluteColumn}`)
+      )
+        templateRow--;
+      const template =
+        formulaAt(templateRow, absoluteColumn) ||
+        planned.get(`${templateRow}:${absoluteColumn}`);
+      if (!template)
+        throw new Error(
+          `${title} rad ${row} saknar formel och ingen säker mall finns; importen stoppas.`,
+        );
+      const formula = copyFormulaToRow(template, templateRow, row);
+      planned.set(`${row}:${absoluteColumn}`, formula);
+      const letter = String.fromCharCode(65 + absoluteColumn);
+      plan.changes.push({
+        kind: title === "Rätter" ? "dishes" : "links",
+        range: `'${title}'!${letter}${row}`,
+        row,
+        column: absoluteColumn,
+        before: "",
+        after: formula,
+        writeValue: formula,
+        formula: true,
+        context: `Fyll tom formel för ny ${title === "Rätter" ? "rätt" : "ingrediensrelation"}`,
+      });
     }
   }
 }
@@ -153,6 +170,40 @@ for (const [kind, sheet] of Object.entries(catalog.raw)) {
       `${title} behöver större rutnät; importen stoppas utan ändringar.`,
     );
 }
+plan.hash = crypto
+  .createHash("sha256")
+  .update(
+    JSON.stringify({
+      assignments: plan.assignments,
+      changes: plan.changes,
+      conflicts: plan.conflicts,
+      warnings: plan.warnings,
+    }),
+  )
+  .digest("hex")
+  .slice(0, 16);
+const outputDirectory = path.resolve(".local/import/reports");
+fs.mkdirSync(outputDirectory, { recursive: true, mode: 0o700 });
+const reportPath = path.join(outputDirectory, `${plan.hash}.md`);
+fs.writeFileSync(reportPath, planMarkdown(plan), { mode: 0o600 });
+fs.chmodSync(reportPath, 0o600);
+const recipesPath = path.join(outputDirectory, `${plan.hash}-recipes.md`);
+fs.writeFileSync(recipesPath, proposalMarkdown(source, plan), { mode: 0o600 });
+fs.chmodSync(recipesPath, 0o600);
+console.log(
+  `Plan ${plan.hash}: ${plan.assignments.length} rätter, ${plan.changes.length} celländringar, ${plan.conflicts.length} konflikter, ${plan.warnings.length} varningar.`,
+);
+console.log(`Fullständig dry-run: ${reportPath}`);
+console.log(`Recept att granska: ${recipesPath}`);
+if (plan.conflicts.length) process.exit(mode === "dry-run" ? 1 : 2);
+if (mode === "apply" && plan.hash !== confirmedHash)
+  throw new Error(
+    "Arket eller förslagen har ändrats sedan godkänd dry-run. Kör ny dry-run.",
+  );
+if (mode === "apply" && !plan.changes.length) {
+  console.log("Inga ändringar att importera.");
+  process.exit(0);
+}
 console.log("Formler och tillgängliga arkceller är kontrollerade.");
 if (mode === "dry-run") process.exit(0);
 
@@ -182,12 +233,26 @@ await sheets.spreadsheets.values.batchUpdate({
   spreadsheetId,
   requestBody: {
     valueInputOption: "RAW",
-    data: plan.changes.map((change) => ({
-      range: change.range,
-      values: [[change.writeValue]],
-    })),
+    data: plan.changes
+      .filter((change) => !change.formula)
+      .map((change) => ({
+        range: change.range,
+        values: [[change.writeValue]],
+      })),
   },
 });
+const formulas = plan.changes.filter((change) => change.formula);
+if (formulas.length)
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: formulas.map((change) => ({
+        range: change.range,
+        values: [[change.after]],
+      })),
+    },
+  });
 const after = buildImportPlan(await loadCatalog(auth), source);
 if (after.conflicts.length || after.changes.length)
   throw new Error(

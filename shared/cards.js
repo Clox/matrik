@@ -98,10 +98,10 @@ export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
       level: "error",
       message: "Titeln behöver ett kortnamn som ryms på högst två rader.",
     });
-  if ((recipe.ingredients || []).length > 14)
+  if ((recipe.ingredients || []).length > 15)
     issues.push({
       level: "error",
-      message: "Fler än 14 ingrediensrader får inte plats på baksidan.",
+      message: "Fler än 15 ingrediensrader får inte plats på baksidan.",
     });
   if (
     (recipe.ingredients || []).some((x) => ingredientDisplayName(x).length > 31)

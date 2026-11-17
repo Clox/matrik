@@ -197,7 +197,11 @@ test("dry-run tilldelar nya ID:n och visar varje arkcell utan att röra befintli
     ),
   );
   assert.ok(plan.changes.some((change) => change.range === "'Rätter'!M2"));
-  assert.ok(plan.changes.some((change) => change.range === "'Rätter'!J2" && change.after === "Utkast"));
+  assert.ok(
+    plan.changes.some(
+      (change) => change.range === "'Rätter'!J2" && change.after === "Utkast",
+    ),
+  );
   assert.ok(plan.changes.some((change) => change.kind === "preparations"));
   assert.ok(
     plan.changes.some(
@@ -252,21 +256,33 @@ test("befintligt recept och befintliga ingrediensrelationer skyddas mot överskr
 test("replace kan uppdatera en befintlig relation utan att skapa en dubblett", () => {
   const replacement = {
     version: 1,
-    recipes: [{
-      name: "Tacos",
-      mode: "replace",
-      servings: 4,
-      activeTime: 20,
-      totalTime: 25,
-      recipe: "Befintligt recept",
-      cardRecipe: "Befintligt kortrecept",
-      ingredients: [line("Fläskkarré", 600, "g")],
-    }],
+    recipes: [
+      {
+        name: "Tacos",
+        mode: "replace",
+        servings: 4,
+        activeTime: 20,
+        totalTime: 25,
+        recipe: "Befintligt recept",
+        cardRecipe: "Befintligt kortrecept",
+        ingredients: [line("Fläskkarré", 600, "g")],
+      },
+    ],
   };
   const first = buildImportPlan(makeCatalog(data), replacement);
   assert.equal(first.conflicts.length, 0);
-  assert.ok(first.changes.some((change) => change.range === "'Rätt-ingredienser'!C2" && change.after === "600"));
-  assert.equal(first.changes.filter((change) => change.kind === "links" && change.column === 1).length, 0);
+  assert.ok(
+    first.changes.some(
+      (change) =>
+        change.range === "'Rätt-ingredienser'!C2" && change.after === "600",
+    ),
+  );
+  assert.equal(
+    first.changes.filter(
+      (change) => change.kind === "links" && change.column === 1,
+    ).length,
+    0,
+  );
   const second = buildImportPlan(appliedCatalog(first), replacement);
   assert.equal(second.conflicts.length, 0);
   assert.equal(second.changes.length, 0);
@@ -286,6 +302,21 @@ test("möjlig dubblett och ogiltig skalning stoppar import", () => {
       message.includes("ogiltig skalning"),
     ),
   );
+});
+
+test("granskad liknande rätt kan skapas separat bara när befintligt ID anges", () => {
+  const similar = structuredClone(proposal);
+  similar.recipes[1].name = "Tacos med köttfärs";
+  similar.recipes[1].distinctFrom = ["M007"];
+  const plan = buildImportPlan(makeCatalog(data), similar);
+  assert.equal(plan.conflicts.length, 0);
+  assert.equal(plan.assignments[1].action, "create");
+  assert.notEqual(plan.assignments[1].id, "M007");
+  assert.ok(
+    plan.warnings.some((message) => message.includes("separat rätt från M007")),
+  );
+  similar.recipes[1].distinctFrom = ["M999"];
+  assert.ok(buildImportPlan(makeCatalog(data), similar).conflicts.length > 0);
 });
 
 test("alternativ syns på kortet medan mängd och skalning fortsätter gälla kanonisk ingrediens", () => {
@@ -321,6 +352,16 @@ test("alternativ syns på kortet medan mängd och skalning fortsätter gälla ka
     }),
     "2 pizzakit med deg och tomatsås",
   );
-  assert.equal(cardUnit({ name: "Färdig currysås", unit: "burk" }, ["2", "3", "4"]), "burkar");
-  assert.equal(cardUnit({ name: "Pizzakit med deg och tomatsås", unit: "kit" }, ["2", "3", "4"]), "");
+  assert.equal(
+    cardUnit({ name: "Färdig currysås", unit: "burk" }, ["2", "3", "4"]),
+    "burkar",
+  );
+  assert.equal(
+    cardUnit({ name: "Pizzakit med deg och tomatsås", unit: "kit" }, [
+      "2",
+      "3",
+      "4",
+    ]),
+    "",
+  );
 });

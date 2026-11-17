@@ -173,11 +173,22 @@ export function buildImportPlan(catalog, source) {
       continue;
     }
     seenProposals.add(normalizedName);
+    if (
+      recipe.distinctFrom &&
+      (!Array.isArray(recipe.distinctFrom) ||
+        recipe.distinctFrom.some((id) => typeof id !== "string"))
+    ) {
+      conflicts.push(
+        `${context}: distinctFrom måste vara en lista med befintliga rätt-ID:n.`,
+      );
+      continue;
+    }
     const existing = dishByName.get(normalizedName);
     if (!existing) {
       const possible = raw.dishes.rows.find(
         (row) =>
           row.id &&
+          !recipe.distinctFrom?.includes(row.id) &&
           (normalize(row.name).includes(normalizedName) ||
             normalizedName.includes(normalize(row.name)) ||
             nameSimilarity(row.name, recipe.name) >= 0.55),
@@ -187,6 +198,18 @@ export function buildImportPlan(catalog, source) {
           `${context}: möjlig dubblett av ${possible.id} (${possible.name}); granska namnmatchningen.`,
         );
         continue;
+      }
+      for (const id of recipe.distinctFrom || []) {
+        const confirmed = raw.dishes.rows.find((row) => row.id === id);
+        if (!confirmed) {
+          conflicts.push(
+            `${context}: bekräftad separat rätt ${id} saknas i arket.`,
+          );
+          continue;
+        }
+        warnings.push(
+          `${context}: granskad som separat rätt från ${id} (${confirmed.name}).`,
+        );
       }
     }
     const id = existing?.id || nextId(usedDishes, "M", 3);
@@ -260,7 +283,8 @@ export function buildImportPlan(catalog, source) {
       oldLinks.every((old, index) => {
         const line = proposedLines[index];
         return (
-          line && normalize(ingredientById.get(old.ingredientId)?.name) ===
+          line &&
+          normalize(ingredientById.get(old.ingredientId)?.name) ===
             normalize(line.name) &&
           number(old.quantity) === number(line.quantity) &&
           comparable(old.unit) === comparable(line.unit) &&
@@ -361,9 +385,10 @@ export function buildImportPlan(catalog, source) {
           }
         }
       }
-      const linkRow = canReplaceLinks && oldLinks[lineIndex]
-        ? oldLinks[lineIndex].rowNumber
-        : nextRow.links++;
+      const linkRow =
+        canReplaceLinks && oldLinks[lineIndex]
+          ? oldLinks[lineIndex].rowNumber
+          : nextRow.links++;
       const values = {
         dishId: id,
         ingredientId: ingredient.id,
