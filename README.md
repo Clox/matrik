@@ -32,6 +32,14 @@ Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet s
 
 ## Sheet-format och beteende
 
+### Veckoplan och inköpslista
+
+Öppna **Veckoplan** i sidomenyn, välj en eller flera av rätterna och ställ in portioner för varje tillfälle. Samma rätt kan läggas till flera gånger med olika portionsantal. Under **Ingredienser och val** kan du välja råvara där receptet anger alternativ och slå på valfria ingredienser. För hamburgare växlar rå potatis och standardvalet frysta pommes automatiskt så att bara ett tillbehör hamnar i listan. **Visa inköpslistan** hoppar direkt till den summerade listan på mobil.
+
+Inköpslistan omfattar alla valda recept och alla deras ingrediensrader. Gemensamma varor summeras när namn och enheter är jämförbara; g/kg och ml/cl/dl/l/msk/tsk kan räknas om. Hela enheter avrundas för varje recept före summering. Om arket har en entydig numerisk förpackningsstorlek visas ett beräknat antal förpackningar; annars visas behovet i receptets enhet tillsammans med inköpsenhet och inköpsnotering, utan gissat förpackningsantal. Varje vara visar vilka rätter mängden kommer från.
+
+Veckoval och portionsantal sparas endast i den aktuella webbläsarens lokala lagring. Recept och ingrediensrelationer hämtas alltid från Google Sheet. Den gamla fliken `Veckoplan` och dess formler läses inte av den nya vyn och ändras inte. Veckoval synkas därför inte mellan enheter. Listan är ett planeringsunderlag; kontrollera skafferiet och faktiska förpackningsstorlekar inför inköp.
+
 Appen läser flikarna `Rätter`, `Ingredienser`, `Rätt-ingredienser`, `Taggar` och `Rätt-förberedelser`. Kolumner kopplas via arkets faktiska rubriker. Den aktuella fliken `Rätt-förberedelser` behöver `Förberedelse-ID`, `Rätt-ID`, `Typ`, `Ledtid (min)`, `Tidpunktstyp`, `Instruktion`, `Villkor`, `Prioritet`, `Aktiv` och `Anteckning`. Valen i dess rullistor hämtas direkt från Sheets datavalidering. Appen skapar inga egna kolumner när valfria fält saknas. Okända kolumner ändras inte.
 
 Varje förberedelse är en egen rad kopplad till rätten via `Rätt-ID`. Nya rader får ett ledigt förberedelse-ID; borttagna rader töms helt. Förberedelserna är separata från `Total tid (min)` och påverkar ännu inte kortlayouten. `Rätter.Har förberedelser` visas som skrivskyddat värde från Sheet och skrivs aldrig av appen. Taggar läses från `Rätter.Taggar` eller från fliken `Taggar`; när rätten saknar egen taggkolumn sparas de i `Taggar`. Bild-ID skrivs som Drive-länk i `Bildlänk`.

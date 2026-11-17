@@ -196,6 +196,176 @@ h3 {
   background: #3c5945;
   color: white;
 }
+.sidebar-count {
+  float: right;
+  color: #b5c7b1;
+}
+.weekly-view {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+.weekly-heading {
+  margin-bottom: 24px;
+}
+.weekly-heading h1 {
+  margin-bottom: 8px;
+}
+.weekly-heading p:not(.eyebrow) {
+  color: #687a6a;
+  font-size: 14px;
+}
+.weekly-jump {
+  color: #365b3d;
+  font-size: 12px;
+  font-weight: 700;
+}
+.weekly-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr);
+  align-items: start;
+  gap: 22px;
+}
+.weekly-layout h2 {
+  margin: 0;
+}
+.weekly-add {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+.weekly-add .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+.weekly-add .primary {
+  white-space: nowrap;
+}
+.weekly-empty {
+  color: #687a6a;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 22px 0 0;
+}
+.weekly-meal {
+  border-top: 1px solid #e4e9e0;
+  padding: 18px 0 2px;
+  margin-top: 18px;
+}
+.weekly-meal-head,
+.weekly-shopping-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+.weekly-meal-head strong,
+.weekly-meal-head span {
+  display: block;
+}
+.weekly-meal-head strong {
+  font-size: 15px;
+}
+.weekly-meal-head span {
+  color: #738174;
+  font-size: 12px;
+  margin-top: 3px;
+}
+.weekly-servings {
+  max-width: 150px;
+  margin: 13px 0;
+}
+.weekly-choices {
+  border: 1px solid #e2e9df;
+  border-radius: 8px;
+}
+.weekly-choices summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.weekly-choices summary span {
+  float: right;
+  color: #738174;
+  font-weight: 400;
+}
+.weekly-ingredient-list {
+  border-top: 1px solid #e2e9df;
+  padding: 0 12px;
+}
+.weekly-ingredient {
+  border-bottom: 1px solid #edf0ea;
+  padding: 11px 0;
+}
+.weekly-ingredient:last-child {
+  border-bottom: 0;
+}
+.weekly-ingredient-main {
+  display: flex;
+  gap: 9px;
+  align-items: start;
+}
+.weekly-ingredient-main input {
+  accent-color: #365b3d;
+  margin-top: 3px;
+}
+.weekly-ingredient-main strong,
+.weekly-ingredient-main small {
+  display: block;
+}
+.weekly-ingredient-main strong {
+  font-size: 13px;
+}
+.weekly-ingredient-main small,
+.weekly-hint {
+  color: #748174;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.weekly-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 9px 0 0 23px;
+  font-size: 11px;
+}
+.weekly-option select {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #d9ded4;
+  border-radius: 6px;
+  background: #fff;
+  padding: 7px;
+}
+.weekly-hint {
+  margin: 6px 0 0 23px;
+}
+.weekly-shopping-item {
+  border-top: 1px solid #e4e9e0;
+  padding: 14px 0;
+}
+.weekly-shopping-top strong {
+  font-size: 15px;
+}
+.weekly-shopping-top b {
+  white-space: nowrap;
+  color: #365b3d;
+  font-size: 15px;
+}
+.weekly-sources,
+.weekly-packages {
+  color: #647563;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+.weekly-packages {
+  color: #9a642b;
+  font-weight: 700;
+}
+.weekly-shopping-item .weekly-hint {
+  margin-left: 0;
+}
 .main {
   padding: 30px 36px 70px;
   min-width: 0;
@@ -825,6 +995,24 @@ h3 {
   }
 }
 @media (max-width: 800px) {
+  .weekly-layout {
+    grid-template-columns: 1fr;
+  }
+  .week-open .list-header,
+  .week-open .search,
+  .week-open .tag-filter,
+  .week-open .recipe-list {
+    display: none;
+  }
+  .week-open .sidebar {
+    padding: 13px 15px;
+  }
+  .week-open .sidebar .logo {
+    padding-bottom: 8px;
+  }
+  .week-open .sidebar-footer {
+    padding-top: 10px;
+  }
   .app {
     display: block;
   }
@@ -858,6 +1046,13 @@ h3 {
   }
 }
 @media (max-width: 520px) {
+  .weekly-add {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .weekly-add .primary {
+    width: 100%;
+  }
   .settings-heading {
     align-items: start;
     flex-direction: column;

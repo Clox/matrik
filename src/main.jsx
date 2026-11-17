@@ -10,6 +10,7 @@ import {
   resolvePrintProfile,
 } from "../shared/print-profile.js";
 import { previewPng, printZonesUrl } from "./preview-image.js";
+import WeeklyPlan from "./WeeklyPlan.jsx";
 import "./style.css";
 
 async function json(url, options = {}) {
@@ -898,7 +899,25 @@ function App() {
     [tagFilter, setTagFilter] = useState(""),
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false),
-    [showSettings, setShowSettings] = useState(false);
+    [showSettings, setShowSettings] = useState(false),
+    [showWeekPlan, setShowWeekPlan] = useState(false),
+    [weekPlan, setWeekPlan] = useState(() => {
+      try {
+        const saved = JSON.parse(
+          localStorage.getItem("matrik.weekPlan") || "[]",
+        );
+        return Array.isArray(saved)
+          ? saved.filter(
+              (item) =>
+                item &&
+                typeof item.id === "string" &&
+                typeof item.recipeId === "string",
+            )
+          : [];
+      } catch {
+        return [];
+      }
+    });
   const catalog = catalogRequest.data;
   const [frontStyle, setFrontStyle] = useState(() => {
     try {
@@ -923,6 +942,11 @@ function App() {
       localStorage.setItem("matrik.settings.frontStyle", frontStyle);
     } catch {}
   }, [frontStyle]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("matrik.weekPlan", JSON.stringify(weekPlan));
+    } catch {}
+  }, [weekPlan]);
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -1007,6 +1031,7 @@ function App() {
     setMessage("");
     setSelected(id);
     setShowSettings(false);
+    setShowWeekPlan(false);
   };
   const save = async () => {
     setSaving(true);
@@ -1127,7 +1152,7 @@ function App() {
       </main>
     );
   return (
-    <div className="app">
+    <div className={`app ${showWeekPlan ? "week-open" : ""}`}>
       <aside className="sidebar">
         <div className="logo" aria-label="Matrik">
           <img src="/brand-mark.svg" alt="" />
@@ -1159,7 +1184,7 @@ function App() {
           {recipes.map((r) => (
             <button
               key={r.id}
-              className={`recipe-item ${selected === r.id && !showSettings ? "active" : ""}`}
+              className={`recipe-item ${selected === r.id && !showSettings && !showWeekPlan ? "active" : ""}`}
               onClick={() => selectRecipe(r.id)}
             >
               <div className="thumb">
@@ -1184,10 +1209,32 @@ function App() {
           ))}
         </div>
         <div className="sidebar-footer">
+          {showWeekPlan && (
+            <button
+              className="settings-link"
+              onClick={() => setShowWeekPlan(false)}
+            >
+              ← Till recepten
+            </button>
+          )}
           <button
-            className={`settings-link ${showSettings ? "active" : ""}`}
+            className={`settings-link ${showWeekPlan ? "active" : ""}`}
+            aria-current={showWeekPlan ? "page" : undefined}
+            onClick={() => {
+              setShowWeekPlan(true);
+              setShowSettings(false);
+            }}
+          >
+            ☷ Veckoplan{" "}
+            <span className="sidebar-count">{weekPlan.length}</span>
+          </button>
+          <button
+            className={`settings-link ${showSettings && !showWeekPlan ? "active" : ""}`}
             aria-current={showSettings ? "page" : undefined}
-            onClick={() => setShowSettings(true)}
+            onClick={() => {
+              setShowSettings(true);
+              setShowWeekPlan(false);
+            }}
           >
             ⚙ Inställningar
           </button>
@@ -1208,7 +1255,13 @@ function App() {
         </div>
       </aside>
       <main className="main">
-        {showSettings ? (
+        {showWeekPlan ? (
+          <WeeklyPlan
+            recipes={catalog.recipes}
+            plan={weekPlan}
+            setPlan={setWeekPlan}
+          />
+        ) : showSettings ? (
           <Settings
             frontStyle={frontStyle}
             onFrontStyleChange={setFrontStyle}
