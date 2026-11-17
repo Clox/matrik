@@ -165,6 +165,15 @@ test("framsidans panel och QR-ruta ligger helt innanför safe area", () => {
     assert.doesNotMatch(svg, /print-zones-overlay|trim-guide|safe-guide/);
   }
 });
+test("lång korttitel bryts innan den når QR-rutan", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  recipe.id = "M013";
+  recipe.shortName = "Hamburgare med pommes";
+  const svg = renderCard(recipe, "front");
+  assert.match(svg, />Hamburgare<\/text>/);
+  assert.match(svg, />med pommes<\/text>/);
+  assert.doesNotMatch(svg, />Hamburgare med<\/text>/);
+});
 test("previewns tryckzoner är en separat bild och följer valt PNG-läge", () => {
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
   const clean = previewDimensions(profile, false);

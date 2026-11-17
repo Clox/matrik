@@ -169,7 +169,7 @@ export function renderCard(
       : "panel";
     const titleParts = wrap(
       recipe.shortName || recipe.name || "Namnlös rätt",
-      15,
+      variant === "panel" ? 12 : 15,
     ).slice(0, 2);
     const panelHasTwoLines = variant === "panel" && titleParts.length > 1;
     const layout =
