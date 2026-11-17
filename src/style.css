@@ -337,6 +337,12 @@ h3 {
   gap: 8px;
   align-items: center;
 }
+.ingredient-display-name {
+  margin: 8px 0 0 36px;
+  color: #36503c;
+  font-size: 12px;
+  font-weight: 700;
+}
 .number {
   color: #96a396;
   font-size: 12px;

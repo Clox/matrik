@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
+import { ingredientDisplayName } from "../shared/ingredient-label.js";
 import {
   DEFAULT_PRINT_PROFILE,
   PRINT_PROFILES,
@@ -683,6 +684,11 @@ function IngredientEditor({ lines, options, update }) {
               ×
             </button>
           </div>
+          {ingredientDisplayName(line) !== line.name && (
+            <p className="ingredient-display-name">
+              {ingredientDisplayName(line)}
+            </p>
+          )}
           <div className="ingredient-fields">
             <Field
               label="Basmängd"

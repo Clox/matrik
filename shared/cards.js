@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { DEFAULT_PRINT_PROFILE, resolvePrintProfile } from "./print-profile.js";
+import { cardUnit, ingredientDisplayName } from "./ingredient-label.js";
 
 export const CARD = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 export const FRONT_STYLES = [
@@ -102,7 +103,9 @@ export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
       level: "error",
       message: "Fler än 14 ingrediensrader får inte plats på baksidan.",
     });
-  if ((recipe.ingredients || []).some((x) => String(x.name).length > 31))
+  if (
+    (recipe.ingredients || []).some((x) => ingredientDisplayName(x).length > 31)
+  )
     issues.push({
       level: "warning",
       message: "Ett ingrediensnamn är långt och kan behöva förkortas.",
@@ -213,16 +216,19 @@ export function renderCard(
   const rows = lines
     .map((item, index) => {
       const y = tableY + index * rowHeight;
-      const name = esc(
-        item.name.length > 31 ? item.name.slice(0, 29) + "…" : item.name,
+      const label = ingredientDisplayName(item);
+      const name = esc(label);
+      const nameSize = label === item.name ? 18 : 15;
+      const quantities = [4, 6, 8].map((portions) =>
+        scaledQuantity(item, portions, recipe.servings),
       );
-      const cells = [4, 6, 8]
+      const cells = quantities
         .map(
-          (portions, i) =>
-            `<text x="${424 + i * 76}" y="${y + 24}" text-anchor="end" font-size="18" font-weight="600">${esc(scaledQuantity(item, portions, recipe.servings))}</text>`,
+          (quantity, i) =>
+            `<text x="${424 + i * 76}" y="${y + 24}" text-anchor="end" font-size="18" font-weight="600">${esc(quantity)}</text>`,
         )
         .join("");
-      return `<rect x="55" y="${y}" width="580" height="${rowHeight}" fill="${index % 2 ? "#f4f1e9" : "white"}"/><text x="66" y="${y + 24}" font-size="18">${name}</text><text x="338" y="${y + 24}" font-size="17" fill="#617162">${esc(item.unit)}</text>${cells}`;
+      return `<rect x="55" y="${y}" width="580" height="${rowHeight}" fill="${index % 2 ? "#f4f1e9" : "white"}"/><text x="66" y="${y + 24}" font-size="${nameSize}" ${fitText(label, nameSize, 255)}>${name}</text><text x="338" y="${y + 24}" font-size="17" fill="#617162">${esc(cardUnit(item, quantities))}</text>${cells}`;
     })
     .join("");
   const instructionY = backInstructionY(lines.length, rowHeight);
