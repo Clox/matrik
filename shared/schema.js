@@ -1,3 +1,5 @@
+import { recipeType } from "./recipe-type.js";
+
 export const SHEETS = {
   dishes: "Rätter",
   ingredients: "Ingredienser",
@@ -122,6 +124,9 @@ export function makeCatalog(data) {
   const preparations = sheetRows(data.preparations, "preparations");
   if (dishes.columns.id < 0 || dishes.columns.name < 0)
     throw new Error("Fliken Rätter behöver kolumner för Rätt-ID och Namn.");
+  const recipeIds = dishes.rows.map((row) => row.id).filter(Boolean);
+  if (new Set(recipeIds).size !== recipeIds.length)
+    throw new Error("Fliken Rätter innehåller dubbla recept-ID:n.");
   if (dishes.columns.hasPreparations < 0)
     throw new Error("Fliken Rätter saknar kolumnen Har förberedelser.");
   if (ingredients.columns.id < 0 || ingredients.columns.name < 0)
@@ -143,7 +148,7 @@ export function makeCatalog(data) {
       id: row.id,
       name: row.name,
       shortName: row.shortName,
-      type: row.type || "Maträtt",
+      type: recipeType(row),
       servings: parseNumber(row.servings, 4),
       activeTime: row.activeTime,
       totalTime: row.totalTime,

@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import { DEFAULT_PRINT_PROFILE, resolvePrintProfile } from "./print-profile.js";
 import { cardUnit, ingredientDisplayName } from "./ingredient-label.js";
+import { recipeType } from "./recipe-type.js";
 
 export const CARD = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 export const FRONT_STYLES = [
@@ -61,9 +62,7 @@ const CARD_THEMES = {
   },
 };
 export function cardTheme(recipe) {
-  return String(recipe.type || "")
-    .trim()
-    .toLowerCase() === "dessert"
+  return recipeType(recipe) === "Dessert"
     ? CARD_THEMES.dessert
     : CARD_THEMES.maträtt;
 }

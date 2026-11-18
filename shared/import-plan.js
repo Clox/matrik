@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { a1, normalize } from "./schema.js";
 import { validateCard } from "./cards.js";
 import { alternativeNote, ingredientListLine } from "./ingredient-label.js";
+import { recipePrefix, recipeType } from "./recipe-type.js";
 
 const SCALING = new Set([
   "Proportionell",
@@ -76,6 +77,8 @@ export function buildImportPlan(catalog, source) {
   const usedDishes = new Set(
     raw.dishes.rows.map((row) => row.id).filter(Boolean),
   );
+  if (usedDishes.size !== raw.dishes.rows.filter((row) => row.id).length)
+    conflicts.push("Rätter innehåller dubbla recept-ID:n; importen stoppas.");
   const usedIngredients = new Set(
     raw.ingredients.rows.map((row) => row.id).filter(Boolean),
   );
@@ -212,7 +215,24 @@ export function buildImportPlan(catalog, source) {
         );
       }
     }
-    const id = existing?.id || nextId(usedDishes, "M", 3);
+    const requestedType =
+      recipe.type || recipe.id
+        ? recipeType(recipe)
+        : existing
+          ? recipeType(existing)
+          : "Maträtt";
+    if (recipe.type && !["Dessert", "Maträtt"].includes(recipe.type))
+      conflicts.push(`${context}: recepttyp måste vara Maträtt eller Dessert.`);
+    if (existing && recipeType(existing) !== requestedType)
+      conflicts.push(
+        `${context}: befintlig recepttyp skiljer sig från förslaget.`,
+      );
+    const id =
+      existing?.id || nextId(usedDishes, recipePrefix(requestedType), 3);
+    if (recipe.id && recipe.id !== id)
+      conflicts.push(
+        `${context}: angivet ID ${recipe.id} stämmer inte med tilldelat ID ${id}.`,
+      );
     const row = existing?.rowNumber || nextRow.dishes++;
     const isNew = !existing;
     const mode = recipe.mode === "replace" ? "replace" : "fill-empty";
@@ -259,6 +279,8 @@ export function buildImportPlan(catalog, source) {
       recipe: recipe.recipe,
       cardRecipe: recipe.cardRecipe,
     };
+    if (column.dishes.type >= 0 && (isNew || recipe.type))
+      allFields.type = requestedType;
     for (const [key, value] of Object.entries(allFields))
       add("dishes", row, key, value, context, { replace: mode === "replace" });
     if (!isNew && recipe.status)
@@ -479,6 +501,7 @@ export function buildImportPlan(catalog, source) {
     }
     const previewRecipe = {
       id,
+      type: requestedType,
       name: recipe.name,
       shortName: recipe.shortName || existing?.shortName || recipe.name,
       servings: baseServings,

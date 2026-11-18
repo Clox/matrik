@@ -233,6 +233,89 @@ test("samma import en gång till ger inga ändringar eller dubbletter", () => {
   );
 });
 
+test("dessert får nästa lediga D-ID utan att ändra befintliga M-recept", () => {
+  const dessert = {
+    ...proposal.recipes[1],
+    id: "D001",
+    type: "Dessert",
+    name: "Kladdkaka",
+    shortName: "Kladdkaka",
+    recipe: "Vispa smeten. Grädda och låt svalna.",
+    cardRecipe: "Vispa. Grädda. Låt svalna.",
+    ingredients: [line("Mjölk", 1, "dl")],
+    preparations: [],
+  };
+  const plan = buildImportPlan(makeCatalog(data), {
+    version: 1,
+    recipes: [dessert],
+  });
+  assert.deepEqual(plan.conflicts, []);
+  assert.equal(plan.assignments[0].id, "D001");
+  assert.equal(plan.assignments[0].action, "create");
+  assert.equal(
+    plan.changes.some(
+      (change) => change.row > 1 && change.row <= 3 && change.kind === "dishes",
+    ),
+    false,
+  );
+  assert.equal(
+    plan.changes.some((change) => change.after === "Recepttyp"),
+    false,
+  );
+  const imported = appliedCatalog(plan);
+  assert.equal(
+    imported.recipes.find((recipe) => recipe.id === "D001").type,
+    "Dessert",
+  );
+  assert.equal(
+    imported.recipes.find((recipe) => recipe.id === "M007").type,
+    "Maträtt",
+  );
+  const repeat = buildImportPlan(imported, { version: 1, recipes: [dessert] });
+  assert.deepEqual(repeat.conflicts, []);
+  assert.equal(repeat.changes.length, 0);
+  const withColumn = structuredClone(data);
+  withColumn.dishes[0].push("Recepttyp");
+  const typedPlan = buildImportPlan(makeCatalog(withColumn), {
+    version: 1,
+    recipes: [dessert],
+  });
+  assert.ok(
+    typedPlan.changes.some(
+      (change) => change.kind === "dishes" && change.after === "Dessert",
+    ),
+  );
+});
+
+test("dessertimport stoppar ID-krock och felaktig recepttyp", () => {
+  const dessert = {
+    ...proposal.recipes[1],
+    id: "M007",
+    type: "Dessert",
+    name: "Kladdkaka",
+    ingredients: [line("Mjölk", 1, "dl")],
+    preparations: [],
+  };
+  const plan = buildImportPlan(makeCatalog(data), {
+    version: 1,
+    recipes: [dessert],
+  });
+  assert.ok(plan.conflicts.some((message) => message.includes("angivet ID")));
+  const mismatch = buildImportPlan(makeCatalog(data), {
+    version: 1,
+    recipes: [{ ...dessert, id: "D001", name: "Tacos" }],
+  });
+  assert.ok(
+    mismatch.conflicts.some((message) => message.includes("recepttyp")),
+  );
+});
+
+test("receptregistret stoppar dubbla ID:n", () => {
+  const duplicate = structuredClone(data);
+  duplicate.dishes[2][0] = "M001";
+  assert.throws(() => makeCatalog(duplicate), /dubbla recept-ID/);
+});
+
 test("befintligt recept och befintliga ingrediensrelationer skyddas mot överskrivning", () => {
   const changed = structuredClone(data);
   changed.dishes[1][6] = "Redan skrivet recept";

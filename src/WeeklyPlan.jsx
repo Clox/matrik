@@ -9,6 +9,16 @@ import {
   shoppingList,
 } from "../shared/shopping-list.js";
 import { grammaticalUnit } from "../shared/ingredient-label.js";
+import { recipeType } from "../shared/recipe-type.js";
+import {
+  WEEK_DAYS,
+  UNSCHEDULED,
+  addPlanEntry,
+  dayLabel,
+  removePlanEntry,
+  replacePlanEntry,
+  updatePlanEntry,
+} from "../shared/weekly-plan.js";
 
 function selected(entry, line, index) {
   const choice = entry.choices?.[lineKey(line, index)];
@@ -17,17 +27,14 @@ function selected(entry, line, index) {
 
 export default function WeeklyPlan({ recipes, plan, setPlan }) {
   const [recipeId, setRecipeId] = useState(recipes[0]?.id || "");
+  const [day, setDay] = useState(UNSCHEDULED);
   const byId = useMemo(
     () => new Map(recipes.map((recipe) => [recipe.id, recipe])),
     [recipes],
   );
   const list = useMemo(() => shoppingList(recipes, plan), [recipes, plan]);
   const update = (entryId, change) =>
-    setPlan((current) =>
-      current.map((entry) =>
-        entry.id === entryId ? { ...entry, ...change } : entry,
-      ),
-    );
+    setPlan((current) => updatePlanEntry(current, entryId, change));
   const updateChoice = (entry, recipe, index, patch) => {
     const next = applyIngredientChoice(entry, recipe, index, patch);
     update(entry.id, { choices: next.choices });
@@ -39,8 +46,8 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
           <p className="eyebrow">Planera och handla</p>
           <h1>Veckoplan</h1>
           <p>
-            Välj rätter och portioner. Listan räknas direkt från recepten i
-            Google Sheet.
+            Välj maträtter, desserter och portioner. Listan räknas direkt från
+            recepten i Google Sheet.
           </p>
           <a className="weekly-jump" href="#weekly-shopping-title">
             Visa inköpslistan ↓
@@ -54,14 +61,14 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
         >
           <div className="section-head">
             <div>
-              <p className="eyebrow">Maträtter</p>
+              <p className="eyebrow">Maträtter och desserter</p>
               <h2 id="weekly-meals-title">Din plan</h2>
             </div>
-            <span className="id-tag">{plan.length} rätter</span>
+            <span className="id-tag">{plan.length} tillfällen</span>
           </div>
           <div className="weekly-add">
             <label className="field">
-              <span>Lägg till rätt</span>
+              <span>Lägg till recept</span>
               <select
                 value={recipeId}
                 onChange={(event) => setRecipeId(event.target.value)}
@@ -73,19 +80,27 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span>Dag</span>
+              <select
+                value={day}
+                onChange={(event) => setDay(event.target.value)}
+              >
+                <option value={UNSCHEDULED}>Ej schemalagt</option>
+                {WEEK_DAYS.map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               className="primary"
               disabled={!byId.has(recipeId)}
               onClick={() =>
-                setPlan((current) => [
-                  ...current,
-                  {
-                    id: crypto.randomUUID(),
-                    recipeId,
-                    servings: byId.get(recipeId).servings || 4,
-                    choices: {},
-                  },
-                ])
+                setPlan((current) =>
+                  addPlanEntry(current, byId.get(recipeId), day),
+                )
               }
             >
               Lägg till
@@ -93,30 +108,72 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
           </div>
           {!plan.length && (
             <p className="weekly-empty">
-              Lägg till en eller flera rätter för att skapa en inköpslista.
+              Lägg till ett eller flera recept för att skapa en inköpslista.
             </p>
           )}
           {plan.map((entry) => {
             const recipe = byId.get(entry.recipeId);
             if (!recipe) return null;
             return (
-              <article className="weekly-meal" key={entry.id}>
+              <article
+                className={`weekly-meal ${recipeType(recipe) === "Dessert" ? "weekly-dessert" : ""}`}
+                key={entry.id}
+              >
                 <div className="weekly-meal-head">
                   <div>
                     <strong>{recipe.name}</strong>
-                    <span>{recipe.id}</span>
+                    <span>
+                      {recipe.id} · {recipeType(recipe)} · {dayLabel(entry.day)}
+                    </span>
                   </div>
                   <button
                     className="secondary"
                     onClick={() =>
-                      setPlan((current) =>
-                        current.filter((item) => item.id !== entry.id),
-                      )
+                      setPlan((current) => removePlanEntry(current, entry.id))
                     }
-                    aria-label={`Ta bort ${recipe.name}`}
+                    aria-label={`Ta bort förekomsten av ${recipe.name}`}
                   >
                     Ta bort
                   </button>
+                </div>
+                <div className="weekly-entry-fields">
+                  <label className="field">
+                    <span>Flytta till dag</span>
+                    <select
+                      value={entry.day || UNSCHEDULED}
+                      onChange={(event) =>
+                        update(entry.id, { day: event.target.value })
+                      }
+                    >
+                      <option value={UNSCHEDULED}>Ej schemalagt</option>
+                      {WEEK_DAYS.map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Byt recept</span>
+                    <select
+                      value={entry.recipeId}
+                      onChange={(event) =>
+                        setPlan((current) =>
+                          replacePlanEntry(
+                            current,
+                            entry.id,
+                            byId.get(event.target.value),
+                          ),
+                        )
+                      }
+                    >
+                      {recipes.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} · {item.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
                 <label className="field weekly-servings">
                   <span>Portioner</span>
@@ -239,7 +296,7 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
           </div>
           {!list.length && (
             <p className="weekly-empty">
-              Listan visas när du lägger till en rätt.
+              Listan visas när du lägger till ett recept.
             </p>
           )}
           <div className="weekly-shopping-list">
@@ -271,7 +328,8 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                 <p className="weekly-sources">
                   {item.sources.map((source, index) => (
                     <span key={index}>
-                      {source.recipeName} ({formatAmount(source.amount)}{" "}
+                      {source.recipeName} · {dayLabel(source.day)} (
+                      {formatAmount(source.amount)}{" "}
                       {grammaticalUnit(source.unit, source.amount)})
                       {index < item.sources.length - 1 ? " · " : ""}
                     </span>

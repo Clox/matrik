@@ -110,8 +110,12 @@ h3 {
 .sidebar input::placeholder {
   color: #b3c3b3;
 }
-.tag-filter {
+.tag-filter,
+.type-filter {
   margin: 9px 0 17px;
+}
+.type-filter {
+  margin-bottom: 0;
 }
 .recipe-list {
   overflow: auto;
@@ -119,6 +123,11 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+.recipe-list-empty {
+  color: #b5c7b1;
+  font-size: 13px;
+  padding: 8px 10px;
 }
 .recipe-item {
   width: 100%;
@@ -250,6 +259,22 @@ h3 {
   border-top: 1px solid #e4e9e0;
   padding: 18px 0 2px;
   margin-top: 18px;
+}
+.weekly-dessert {
+  border-top-color: #d9a8bf;
+  background: #fff7fa;
+  border-radius: 8px;
+  padding: 18px 12px 12px;
+}
+.weekly-entry-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.weekly-entry-fields .field {
+  min-width: 0;
+  margin-bottom: 0;
 }
 .weekly-meal-head,
 .weekly-shopping-top {
@@ -1000,6 +1025,7 @@ h3 {
   }
   .week-open .list-header,
   .week-open .search,
+  .week-open .type-filter,
   .week-open .tag-filter,
   .week-open .recipe-list {
     display: none;
@@ -1046,6 +1072,9 @@ h3 {
   }
 }
 @media (max-width: 520px) {
+  .weekly-entry-fields {
+    grid-template-columns: 1fr;
+  }
   .weekly-add {
     align-items: stretch;
     flex-direction: column;

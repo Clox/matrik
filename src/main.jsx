@@ -11,6 +11,8 @@ import {
 } from "../shared/print-profile.js";
 import { previewPng, printLinesUrl } from "./preview-image.js";
 import WeeklyPlan from "./WeeklyPlan.jsx";
+import { normalizeWeekPlan } from "../shared/weekly-plan.js";
+import { filterRecipes, recipeType } from "../shared/recipe-type.js";
 import "./style.css";
 
 async function json(url, options = {}) {
@@ -927,9 +929,11 @@ function App() {
     [draft, setDraft] = useState(null),
     [preview, setPreview] = useState(null),
     [search, setSearch] = useState(""),
+    [recipeTypeFilter, setRecipeTypeFilter] = useState("Maträtt"),
     [tagFilter, setTagFilter] = useState(""),
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false),
+    [imageRefresh, setImageRefresh] = useState({}),
     [showSettings, setShowSettings] = useState(false),
     [showWeekPlan, setShowWeekPlan] = useState(false),
     [weekPlan, setWeekPlan] = useState(() => {
@@ -937,14 +941,7 @@ function App() {
         const saved = JSON.parse(
           localStorage.getItem("matrik.weekPlan") || "[]",
         );
-        return Array.isArray(saved)
-          ? saved.filter(
-              (item) =>
-                item &&
-                typeof item.id === "string" &&
-                typeof item.recipeId === "string",
-            )
-          : [];
+        return normalizeWeekPlan(saved);
       } catch {
         return [];
       }
@@ -1047,10 +1044,9 @@ function App() {
     const timer = setTimeout(() => setPreview(structuredClone(draft)), 600);
     return () => clearTimeout(timer);
   }, [draft]);
-  const allTags = [
-    ...new Set((catalog?.recipes || []).flatMap((r) => r.tags)),
-  ].sort();
-  const recipes = (catalog?.recipes || []).filter(
+  const typedRecipes = filterRecipes(catalog?.recipes || [], recipeTypeFilter);
+  const allTags = [...new Set(typedRecipes.flatMap((r) => r.tags))].sort();
+  const recipes = typedRecipes.filter(
     (r) =>
       `${r.id} ${r.name} ${r.shortName}`
         .toLowerCase()
@@ -1083,6 +1079,10 @@ function App() {
         data: updatedCatalog,
         error: null,
       });
+      setImageRefresh((current) => ({
+        ...current,
+        [draft.id]: (current[draft.id] || 0) + 1,
+      }));
       setMessage("Sparat i Google Sheets.");
     } catch (error) {
       setMessage(error.message);
@@ -1103,6 +1103,10 @@ function App() {
       });
       const data = await toDataUrl(file);
       setDraft((d) => ({ ...d, imageId: result.imageId, imageDataUrl: data }));
+      setImageRefresh((current) => ({
+        ...current,
+        [draft.id]: (current[draft.id] || 0) + 1,
+      }));
       setMessage(
         "Bilden finns i Drive. Spara receptet för att koppla bilden till raden i Sheet.",
       );
@@ -1192,7 +1196,12 @@ function App() {
         <div className="list-header">
           <p className="eyebrow">Receptregister</p>
           <h2>
-            Rätter <em>{recipes.length}</em>
+            {recipeTypeFilter === "Maträtt"
+              ? "Maträtter"
+              : recipeTypeFilter === "Dessert"
+                ? "Desserter"
+                : "Recept"}{" "}
+            <em>{recipes.length}</em>
           </h2>
         </div>
         <input
@@ -1201,6 +1210,19 @@ function App() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <select
+          className="type-filter"
+          aria-label="Filtrera recepttyp"
+          value={recipeTypeFilter}
+          onChange={(event) => {
+            setRecipeTypeFilter(event.target.value);
+            setTagFilter("");
+          }}
+        >
+          <option value="Maträtt">Maträtter</option>
+          <option value="Dessert">Desserter</option>
+          <option value="Alla">Alla recept</option>
+        </select>
         <select
           className="tag-filter"
           value={tagFilter}
@@ -1212,6 +1234,13 @@ function App() {
           ))}
         </select>
         <div className="recipe-list">
+          {!recipes.length && (
+            <p className="recipe-list-empty">
+              {recipeTypeFilter === "Dessert"
+                ? "Inga desserter importerade ännu."
+                : "Inga recept matchar filtret."}
+            </p>
+          )}
           {recipes.map((r) => (
             <button
               key={r.id}
@@ -1221,7 +1250,11 @@ function App() {
               <div className="thumb">
                 {r.id.slice(-2)}
                 <img
-                  src={`/api/recipes/${encodeURIComponent(r.id)}/image`}
+                  src={
+                    r.id === draft?.id && draft.imageDataUrl
+                      ? draft.imageDataUrl
+                      : `/api/recipes/${encodeURIComponent(r.id)}/image?v=${imageRefresh[r.id] || 0}`
+                  }
                   alt=""
                   loading="lazy"
                   onError={(e) => {
@@ -1232,7 +1265,7 @@ function App() {
               <div>
                 <strong>{r.name}</strong>
                 <span>
-                  {r.id} · {r.status || "Ingen status"}
+                  {r.id} · {recipeType(r)} · {r.status || "Ingen status"}
                 </span>
               </div>
               <b>›</b>
@@ -1310,25 +1343,33 @@ function App() {
         ) : !draft ? (
           <div className="empty">
             <p className="eyebrow">Välkommen tillbaka</p>
-            <h1>Välj en rätt</h1>
+            <h1>
+              {recipeTypeFilter === "Dessert"
+                ? "Inga desserter ännu"
+                : "Välj ett recept"}
+            </h1>
             <p>
-              Öppna ett recept i listan för att redigera det och se kortet live.
+              {recipeTypeFilter === "Dessert"
+                ? "När dessertrecept har importerats visas de här med sina rosa kort."
+                : "Öppna ett recept i listan för att redigera det och se kortet live."}
             </p>
-            <button
-              className="primary"
-              onClick={() =>
-                selectRecipe(
-                  catalog.recipes.find((x) => x.id === "M007")?.id ||
-                    catalog.recipes[0]?.id,
-                )
-              }
-            >
-              Öppna{" "}
-              {catalog.recipes.some((x) => x.id === "M007")
-                ? "M007 Tacos"
-                : "första rätten"}{" "}
-              →
-            </button>
+            {recipeTypeFilter !== "Dessert" && (
+              <button
+                className="primary"
+                onClick={() =>
+                  selectRecipe(
+                    catalog.recipes.find((x) => x.id === "M007")?.id ||
+                      catalog.recipes[0]?.id,
+                  )
+                }
+              >
+                Öppna{" "}
+                {catalog.recipes.some((x) => x.id === "M007")
+                  ? "M007 Tacos"
+                  : "första rätten"}{" "}
+                →
+              </button>
+            )}
           </div>
         ) : (
           <>

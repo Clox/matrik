@@ -468,7 +468,7 @@ export async function saveRecipe(auth, id, input) {
     (r) => r.id === id,
   );
 }
-export async function findImage(auth, recipe) {
+export async function findImageFile(auth, recipe) {
   if (!folderId) return null;
   if (recipe.imageId) {
     try {
@@ -476,27 +476,33 @@ export async function findImage(auth, recipe) {
       if (!fileId) throw new Error("Ogiltig bildlänk.");
       const file = await drive(auth).files.get({
         fileId,
-        fields: "id,mimeType,parents,trashed",
+        fields: "id,mimeType,parents,trashed,modifiedTime,md5Checksum,version",
       });
       if (
         !file.data.trashed &&
         file.data.parents?.includes(folderId) &&
         file.data.mimeType?.startsWith("image/")
       )
-        return fileId;
+        return file.data;
     } catch {}
+    // En trasig explicit bildlänk får inte falla tillbaka till en äldre bild.
+    return null;
   }
   const result = await drive(auth).files.list({
     q: `'${folderId.replaceAll("'", "\\'")}' in parents and name contains '${recipe.id.replaceAll("'", "\\'")}' and trashed = false`,
-    fields: "files(id,name,mimeType),nextPageToken",
+    fields:
+      "files(id,name,mimeType,modifiedTime,md5Checksum,version),nextPageToken",
     pageSize: 100,
   });
   return (
     result.data.files?.find(
       (file) =>
         file.mimeType?.startsWith("image/") && file.name.startsWith(recipe.id),
-    )?.id || null
+    ) || null
   );
+}
+export async function findImage(auth, recipe) {
+  return (await findImageFile(auth, recipe))?.id || null;
 }
 export async function imageBytes(auth, fileId) {
   const result = await drive(auth).files.get(
@@ -511,15 +517,10 @@ export async function uploadImage(auth, recipe, file) {
       status: 422,
     });
   const api = drive(auth);
-  const oldId = await findImage(auth, recipe);
   const media = {
     mimeType: file.mimetype,
     body: (await import("node:stream")).Readable.from(file.buffer),
   };
-  if (oldId) {
-    await api.files.update({ fileId: oldId, media, fields: "id" });
-    return oldId;
-  }
   const result = await api.files.create({
     requestBody: {
       name: `${recipe.id}-${Date.now()}.${file.mimetype.split("/")[1] || "jpg"}`,

@@ -186,6 +186,8 @@ export function shoppingList(recipes, plan) {
       const group = groups.get(key);
       group.total += amount * metric.factor;
       group.sources.push({
+        entryId: entry.id,
+        day: entry.day || "unscheduled",
         recipeId: recipe.id,
         recipeName: recipe.name,
         servings,

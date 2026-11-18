@@ -16,6 +16,7 @@ import {
   authUrl,
   clearTokens,
   findImage,
+  findImageFile,
   imageBytes,
   isConfigured,
   loadCatalog,
@@ -26,6 +27,7 @@ import {
   uploadImage,
   withRevisions,
 } from "./google.js";
+import { cachedImage, imageEtag, invalidateImage } from "./image-cache.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
@@ -107,6 +109,7 @@ app.get(
   sameOrigin,
   asyncRoute(async (req, res) => {
     const catalog = withRevisions(await loadCatalog(authClient()));
+    imageCatalogCache = { at: Date.now(), promise: Promise.resolve(catalog) };
     res.set("Cache-Control", "no-store");
     res.json({
       recipes: catalog.recipes,
@@ -138,13 +141,18 @@ app.get(
       (r) => r.id === req.params.id,
     );
     if (!recipe) return res.sendStatus(404);
-    const fileId = await findImage(auth, recipe);
-    if (!fileId) return res.sendStatus(404);
-    const bytes = await imageBytes(auth, fileId);
-    const info = await sharp(bytes).metadata();
+    const file = await findImageFile(auth, recipe);
+    if (!file) return res.sendStatus(404);
     res.set({
-      "Content-Type": `image/${info.format === "jpeg" ? "jpeg" : info.format || "jpeg"}`,
-      "Cache-Control": "private, no-store",
+      "Content-Type": file.mimeType,
+      "Cache-Control": "private, no-cache",
+      ETag: imageEtag(file),
+    });
+    if (req.fresh) return res.status(304).end();
+    const bytes = await cachedImage(file, async () => {
+      const data = await imageBytes(auth, file.id);
+      await sharp(data).metadata();
+      return data;
     });
     res.send(bytes);
   }),
@@ -172,7 +180,10 @@ app.post(
       (r) => r.id === req.params.id,
     );
     if (!recipe) return res.sendStatus(404);
+    const previousImageId = await findImage(auth, recipe);
     const imageId = await uploadImage(auth, recipe, req.file);
+    if (previousImageId) await invalidateImage(previousImageId);
+    await invalidateImage(imageId);
     imageCatalogCache = null;
     res.json({ imageId });
   }),
@@ -191,9 +202,13 @@ async function exportRecipe(req) {
     throw Object.assign(error, { status: 422 });
   }
   const auth = authClient();
-  const fileId = await findImage(auth, recipe);
-  if (fileId) {
-    const bytes = await imageBytes(auth, fileId);
+  const file = await findImageFile(auth, recipe);
+  if (file) {
+    const bytes = await cachedImage(file, async () => {
+      const data = await imageBytes(auth, file.id);
+      await sharp(data).metadata();
+      return data;
+    });
     const meta = await sharp(bytes).metadata();
     recipe.imageDataUrl = `data:image/${meta.format === "jpeg" ? "jpeg" : meta.format};base64,${bytes.toString("base64")}`;
   }
