@@ -54,6 +54,10 @@ Standard är **MakePlayingCards - 63 × 88 mm**: 3,175 mm bleed utanför trim oc
 
 Slutlig tryckexport innehåller aldrig tryckzoner eller skärlinjer. **Visa bleed** väljer mellan färdigt trimområde och hela exportytan. **Visa trycklinjer** visar trim- och safe-area-markeringar oberoende av bleed. Preview-PNG sparar eller kopierar just det visade läget. Matbilden och bakgrunderna täcker hela exportytan. Textpanelen, texten och QR-rutan på framsidan placeras innanför safe area.
 
+### Hela kortleken för tryck
+
+Installera `zbarimg` (på Debian/Ubuntu: paketet `zbar-tools`) för automatisk QR-kontroll. Efter Google-inloggning kan du skapa samtliga kortpar direkt från det aktuella arket och Drive med `npm run print:deck -- --out .local/print/min-kortlek --expected 57`. Välj en ny utdatakatalog för varje körning, så att gamla kort inte kan blandas med nya. Kommandot läser bara Google-data och skriver 822 × 1122 px PNG med 300 DPI under `.local/`. Varje kort får en framsida och baksida med samma ordningsnummer och recept-ID, plus `manifest.json` med kontrollsummor och `checklista.csv`. Exporten stoppas vid saknad bild, layoutfel, fel format, oläslig QR-kod eller om arket ändras under körningen. Den använder den gemensamma SVG-renderingen och semitransparent panel. Förhandsgranska alltid alla kort och provskriv i 100 % innan beställning; leverantörens förhandsvisning måste också kontrolleras kort för kort.
+
 ## Recepttyper och veckoplan
 
 Receptsamlingen kan filtreras på **Maträtter**, **Desserter** eller **Alla recept**. Maträtter är standardläget. Recept-ID:n som börjar på `M` behandlas som Maträtt och `D` som Dessert; en eventuell kolumn `Recepttyp` i `Rätter` läses också. Nuvarande Google Sheet saknar den kolumnen, och ingen schemamigrering behövs för att lägga till D-recept. Samma ingrediensregister, relationer, taggar, förberedelser och bildlänkar används för båda typerna.

@@ -13,6 +13,7 @@
     "test": "node --test",
     "import:dry": "node scripts/import-recipes.js dry-run",
     "import:apply": "node scripts/import-recipes.js apply",
+    "print:deck": "node scripts/export-print-deck.js",
     "format": "prettier --write server shared src test vite.config.js"
   },
   "dependencies": {
