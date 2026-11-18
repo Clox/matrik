@@ -9,7 +9,7 @@ import {
   printProfileErrors,
   resolvePrintProfile,
 } from "../shared/print-profile.js";
-import { previewPng, printZonesUrl } from "./preview-image.js";
+import { previewPng, printLinesUrl } from "./preview-image.js";
 import WeeklyPlan from "./WeeklyPlan.jsx";
 import "./style.css";
 
@@ -72,11 +72,12 @@ function CardPreviewImage({
   src,
   alt,
   profile,
-  showPrintZones,
+  showBleed,
+  showPrintLines,
   enlarged = false,
 }) {
   const bleed = profile.bleedMm;
-  const imageStyle = showPrintZones
+  const imageStyle = showBleed
     ? undefined
     : {
         width: `${(profile.widthMm / profile.trimWidthMm) * 100}%`,
@@ -84,7 +85,7 @@ function CardPreviewImage({
         left: `${(-bleed / profile.trimWidthMm) * 100}%`,
         top: `${(-bleed / profile.trimHeightMm) * 100}%`,
       };
-  const surfaceStyle = showPrintZones
+  const surfaceStyle = showBleed
     ? undefined
     : {
         inset: `${(bleed / profile.heightMm) * 100}% ${(bleed / profile.widthMm) * 100}%`,
@@ -96,10 +97,10 @@ function CardPreviewImage({
     >
       <span className="card-preview-surface" style={surfaceStyle}>
         <img src={src} alt={alt} style={imageStyle} />
-        {showPrintZones && (
+        {showPrintLines && (
           <img
-            className="print-zones-overlay"
-            src={printZonesUrl(profile)}
+            className="print-lines-overlay"
+            src={printLinesUrl(profile, showBleed)}
             alt=""
             aria-hidden="true"
           />
@@ -127,11 +128,17 @@ function Preview({ recipe, frontStyle, printProfile }) {
   const cardUrls = useCardImageUrls(cards);
   const [expandedSide, setExpandedSide] = useState(null);
   const [copyMessage, setCopyMessage] = useState("");
-  const [showPrintZones, setShowPrintZones] = useState(false);
+  const [showBleed, setShowBleed] = useState(false);
+  const [showPrintLines, setShowPrintLines] = useState(false);
   const saveCard = async () => {
     try {
       const url = URL.createObjectURL(
-        await previewPng(cardUrls[expandedSide], profile, showPrintZones),
+        await previewPng(
+          cardUrls[expandedSide],
+          profile,
+          showBleed,
+          showPrintLines,
+        ),
       );
       const link = document.createElement("a");
       link.href = url;
@@ -151,7 +158,12 @@ function Preview({ recipe, frontStyle, printProfile }) {
       return;
     }
     try {
-      const png = previewPng(cardUrls[expandedSide], profile, showPrintZones);
+      const png = previewPng(
+        cardUrls[expandedSide],
+        profile,
+        showBleed,
+        showPrintLines,
+      );
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": png }),
       ]);
@@ -206,17 +218,25 @@ function Preview({ recipe, frontStyle, printProfile }) {
           <label className="trim-toggle">
             <input
               type="checkbox"
-              checked={showPrintZones}
-              onChange={(event) => setShowPrintZones(event.target.checked)}
+              checked={showBleed}
+              onChange={(event) => setShowBleed(event.target.checked)}
             />
-            Visa tryckzoner
+            Visa bleed
+          </label>
+          <label className="trim-toggle">
+            <input
+              type="checkbox"
+              checked={showPrintLines}
+              onChange={(event) => setShowPrintLines(event.target.checked)}
+            />
+            Visa trycklinjer
           </label>
           <span
             className="print-zone-key"
-            style={{ visibility: showPrintZones ? "visible" : "hidden" }}
-            aria-hidden={!showPrintZones}
+            style={{ visibility: showPrintLines ? "visible" : "hidden" }}
+            aria-hidden={!showPrintLines}
           >
-            Tonat: bleed · Streck: trim · Prickar: safe area
+            Streck: trim · Prickar: safe area
           </span>
         </div>
       </div>
@@ -232,7 +252,8 @@ function Preview({ recipe, frontStyle, printProfile }) {
               src={cardUrls.front}
               alt="Kortets framsida"
               profile={profile}
-              showPrintZones={showPrintZones}
+              showBleed={showBleed}
+              showPrintLines={showPrintLines}
             />
           </button>
           <p>Framsida</p>
@@ -248,7 +269,8 @@ function Preview({ recipe, frontStyle, printProfile }) {
               src={cardUrls.back}
               alt="Kortets baksida"
               profile={profile}
-              showPrintZones={showPrintZones}
+              showBleed={showBleed}
+              showPrintLines={showPrintLines}
             />
           </button>
           <p>Baksida · 4 / 6 / 8 portioner</p>
@@ -314,23 +336,32 @@ function Preview({ recipe, frontStyle, printProfile }) {
               <label className="trim-toggle">
                 <input
                   type="checkbox"
-                  checked={showPrintZones}
-                  onChange={(event) => setShowPrintZones(event.target.checked)}
+                  checked={showBleed}
+                  onChange={(event) => setShowBleed(event.target.checked)}
                 />
-                Visa tryckzoner
+                Visa bleed
+              </label>
+              <label className="trim-toggle">
+                <input
+                  type="checkbox"
+                  checked={showPrintLines}
+                  onChange={(event) => setShowPrintLines(event.target.checked)}
+                />
+                Visa trycklinjer
               </label>
               <span
                 className="print-zone-key"
-                style={{ visibility: showPrintZones ? "visible" : "hidden" }}
-                aria-hidden={!showPrintZones}
+                style={{ visibility: showPrintLines ? "visible" : "hidden" }}
+                aria-hidden={!showPrintLines}
               >
-                Tonat: bleed · Streck: trim · Prickar: safe area
+                Streck: trim · Prickar: safe area
               </span>
               <CardPreviewImage
                 src={cardUrls[expandedSide]}
                 alt={`Kortets ${expandedSide === "front" ? "framsida" : "baksida"}`}
                 profile={profile}
-                showPrintZones={showPrintZones}
+                showBleed={showBleed}
+                showPrintLines={showPrintLines}
                 enlarged
               />
               <div className="card-image-actions">
@@ -342,8 +373,8 @@ function Preview({ recipe, frontStyle, printProfile }) {
                 </button>
               </div>
               <p className="print-zone-key">
-                Preview-PNG följer visningen. Tryckfiler exporteras alltid utan
-                tryckzoner.
+                Preview-PNG följer valen ovan. Tryckfiler innehåller alltid
+                bleed men inga trycklinjer.
               </p>
               {copyMessage && (
                 <p className="card-copy-message" role="status">

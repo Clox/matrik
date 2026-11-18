@@ -15,7 +15,7 @@ import {
   printProfileErrors,
   resolvePrintProfile,
 } from "../shared/print-profile.js";
-import { previewDimensions, printZonesSvg } from "../src/preview-image.js";
+import { previewDimensions, printLinesSvg } from "../src/preview-image.js";
 
 const fixture = {
   dishes: [
@@ -183,20 +183,31 @@ test("hela kortnamnet visas även när två smala rader inte räcker", () => {
   assert.match(svg, />Fläskkarré med<\/text>/);
   assert.match(svg, />klyftpotatis<\/text>/);
 });
-test("previewns tryckzoner är en separat bild och följer valt PNG-läge", () => {
+test("bleed och trycklinjer är separata för trim- och exportvyn", () => {
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
-  const clean = previewDimensions(profile, false);
-  const marked = previewDimensions(profile, true);
-  assert.equal(clean.width, 747);
-  assert.equal(clean.height, 1043);
-  assert.deepEqual(marked, { width: 822, height: 1122 });
-  const overlay = printZonesSvg(profile);
-  assert.match(overlay, /fill-rule="evenodd"/);
-  assert.match(overlay, /x="31\.75" y="31\.75"/);
-  assert.match(overlay, /x="63\.5" y="63\.5"/);
+  assert.deepEqual(previewDimensions(profile, false), {
+    width: 747,
+    height: 1043,
+  });
+  assert.deepEqual(previewDimensions(profile, true), {
+    width: 822,
+    height: 1122,
+  });
+  const trimLines = printLinesSvg(profile, false);
+  const bleedLines = printLinesSvg(profile, true);
+  assert.match(trimLines, /viewBox="0 0 630 880"/);
+  assert.match(trimLines, /x="1\.5" y="1\.5" width="627" height="877"/);
+  assert.match(trimLines, /x="31\.75" y="31\.75"/);
+  assert.match(bleedLines, /viewBox="0 0 693\.5 943\.5"/);
+  assert.match(bleedLines, /x="31\.75" y="31\.75" width="630" height="880"/);
+  assert.match(bleedLines, /x="63\.5" y="63\.5"/);
+  for (const lines of [trimLines, bleedLines]) {
+    assert.match(lines, /fill="none"/);
+    assert.doesNotMatch(lines, /fill-opacity|fill-rule|<path/);
+  }
   assert.doesNotMatch(
     renderCard(makeCatalog(fixture).recipes[0], "front"),
-    /fill-rule="evenodd"/,
+    /print-lines-overlay/,
   );
 });
 test("egen tryckprofil styr SVG-mått och kräver tillräcklig upplösning", () => {
