@@ -68,11 +68,12 @@ export function cardTheme(recipe) {
     : CARD_THEMES.maträtt;
 }
 function categoryIcon(theme, y) {
-  const paths =
-    theme.icon === "ice-cream-bowl"
-      ? '<path d="M7 13a9 9 0 0 1 18 0v2H7zM3 18h26l-4 12H7zM14 30h4v5h-4zM9 35h14v3H9z"/>'
-      : '<path d="M5 1h3v11h2V1h3v11h2V1h3v12a7 7 0 0 1-5 6.7V38h-4V19.7A7 7 0 0 1 4 13V1zM28 1c5 0 7 5 7 12v12h-5v13h-4V1z"/>';
-  return `<g data-category-icon="${theme.icon}" transform="translate(382 ${y})" fill="white">${paths}</g>`;
+  if (theme.icon === "ice-cream-bowl") {
+    // Lucide ice-cream-bowl, original 24 × 24 geometry (ISC license).
+    // https://github.com/lucide-icons/lucide/blob/main/icons/ice-cream-bowl.svg
+    return `<g data-category-icon="ice-cream-bowl" transform="translate(382 ${y}) scale(1.7)" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17c5 0 8-2.69 8-6H4c0 3.31 3 6 8 6m-4 4h8m-4-3v3M5.14 11a3.5 3.5 0 1 1 6.71 0"/><path d="M12.14 11a3.5 3.5 0 1 1 6.71 0"/><path d="M15.5 6.5a3.5 3.5 0 1 0-7 0"/></g>`;
+  }
+  return `<g data-category-icon="utensils" transform="translate(382 ${y})" fill="white"><path d="M5 1h3v11h2V1h3v11h2V1h3v12a7 7 0 0 1-5 6.7V38h-4V19.7A7 7 0 0 1 4 13V1zM28 1c5 0 7 5 7 12v12h-5v13h-4V1z"/></g>`;
 }
 const esc = (value) =>
   String(value ?? "").replace(

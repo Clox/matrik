@@ -255,12 +255,14 @@ test("recepttyp väljer korttema utan att ändra maträttens färger", () => {
     /data-category-icon="utensils" transform="translate\((\d+) (\d+)\)" fill="white"/,
   );
   const dessertIcon = dessertFront.match(
-    /data-category-icon="ice-cream-bowl" transform="translate\((\d+) (\d+)\)" fill="white"/,
+    /data-category-icon="ice-cream-bowl" transform="translate\((\d+) (\d+)\) scale\(1\.7\)" fill="none" stroke="white"/,
   );
   assert.ok(foodIcon && dessertIcon);
   assert.equal(foodIcon[1], dessertIcon[1]);
   assert.ok(Number(foodIcon[1]) + 38 < 435);
-  assert.ok(Number(dessertIcon[1]) + 38 < 435);
+  assert.ok(Number(dessertIcon[1]) + 24 * 1.7 < 435);
+  assert.match(dessertFront, /M12 17c5 0 8-2\.69 8-6H4c0 3\.31 3 6 8 6/);
+  assert.match(dessertFront, /M15\.5 6\.5a3\.5 3\.5 0 1 0-7 0/);
   assert.match(dessertFront, /fill="#B74379" fill-opacity="\.94"/);
   assert.match(dessertFront, /rx="10" fill="#fff5f9"/);
   assert.match(dessertFront, /<g fill="#4d1f3b">/);
