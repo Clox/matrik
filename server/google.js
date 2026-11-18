@@ -97,7 +97,19 @@ const sheets = (auth) => google.sheets({ version: "v4", auth });
 const drive = (auth) => google.drive({ version: "v3", auth });
 export async function loadCatalog(auth) {
   if (!spreadsheetId) throw new Error("GOOGLE_SPREADSHEET_ID saknas.");
-  const ranges = Object.values(SHEETS).map(q);
+  const metadata = await sheets(auth).spreadsheets.get({
+    spreadsheetId,
+    ranges: [`${q(SHEETS.preparations)}!A2:J2`],
+    includeGridData: true,
+    fields: "sheets(properties(title),data(rowData(values(dataValidation))))",
+  });
+  const hasImageSheet = metadata.data.sheets?.some(
+    (sheet) => sheet.properties?.title === IMAGE_SHEET,
+  );
+  const ranges = [
+    ...Object.values(SHEETS).map(q),
+    ...(hasImageSheet ? [q(IMAGE_SHEET)] : []),
+  ];
   const response = await sheets(auth).spreadsheets.values.batchGet({
     spreadsheetId,
     ranges,
@@ -110,31 +122,13 @@ export async function loadCatalog(auth) {
     ]),
   );
   const catalog = makeCatalog(data);
-  const sheetList = await sheets(auth).spreadsheets.get({
-    spreadsheetId,
-    fields: "sheets(properties(title))",
-  });
-  const hasImageSheet = sheetList.data.sheets?.some(
-    (sheet) => sheet.properties?.title === IMAGE_SHEET,
-  );
   const imageValues = hasImageSheet
-    ? (
-        await sheets(auth).spreadsheets.values.get({
-          spreadsheetId,
-          range: q(IMAGE_SHEET),
-        })
-      ).data.values || []
+    ? response.data.valueRanges?.[Object.keys(SHEETS).length]?.values || []
     : [];
   attachImageVariants(catalog, imageValues);
   catalog.imageSheetExists = Boolean(hasImageSheet);
-  const validation = await sheets(auth).spreadsheets.get({
-    spreadsheetId,
-    ranges: [`${q(SHEETS.preparations)}!A2:J2`],
-    includeGridData: true,
-    fields: "sheets(properties(title),data(rowData(values(dataValidation))))",
-  });
   const cells =
-    validation.data.sheets?.find(
+    metadata.data.sheets?.find(
       (sheet) => sheet.properties?.title === SHEETS.preparations,
     )?.data?.[0]?.rowData?.[0]?.values || [];
   catalog.preparationOptions = Object.fromEntries(
