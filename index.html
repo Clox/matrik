@@ -7,7 +7,20 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="startup-fallback" role="status" style="margin: 20vh auto; padding: 2rem; max-width: 34rem; text-align: center; font: 18px/1.5 system-ui, sans-serif; color: #253729">
+        Hämtar recept…
+      </main>
+    </div>
+    <script>
+      setTimeout(() => {
+        const fallback = document.getElementById("startup-fallback");
+        if (!fallback) return;
+        fallback.setAttribute("role", "alert");
+        fallback.innerHTML =
+          '<strong>Matrik kunde inte starta.</strong><br>Starta om den lokala servern och ladda sedan om sidan.';
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
