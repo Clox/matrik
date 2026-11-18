@@ -13,6 +13,7 @@ import {
 } from "../server/google.js";
 import { cachedImage } from "../server/image-cache.js";
 import { renderCard, validateCard } from "../shared/cards.js";
+import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
 import {
   DEFAULT_PRINT_PROFILE,
   resolvePrintProfile,
@@ -80,13 +81,32 @@ for (const [index, recipe] of recipes.entries()) {
   if (
     !imageMeta.width ||
     !imageMeta.height ||
-    imageMeta.width < profile.widthPx ||
-    imageMeta.height < profile.heightPx
+    !cropLimits(imageMeta.width, imageMeta.height, DEFAULT_PRINT_PROFILE)
+      .possible
   )
-    throw new Error(`${recipe.id}: Bilden är mindre än exportformatet.`);
+    throw new Error(
+      `${recipe.id}: Bildens originalpixlar räcker inte för DPI och exportmått efter beskärning.`,
+    );
+  if (
+    recipe.imageWidth &&
+    (recipe.imageWidth !== imageMeta.width ||
+      recipe.imageHeight !== imageMeta.height)
+  )
+    throw new Error(
+      `${recipe.id}: lagrade originalmått stämmer inte med Drive-filen.`,
+    );
+  if (recipe.imageCrop)
+    normalizeCrop(
+      recipe.imageCrop,
+      imageMeta.width,
+      imageMeta.height,
+      DEFAULT_PRINT_PROFILE,
+    );
   const card = {
     ...recipe,
     imageDataUrl: `data:image/${imageMeta.format === "jpeg" ? "jpeg" : imageMeta.format};base64,${image.toString("base64")}`,
+    imageWidth: imageMeta.width,
+    imageHeight: imageMeta.height,
   };
   const issues = validateCard(card, DEFAULT_PRINT_PROFILE);
   const errors = issues.filter((issue) => issue.level === "error");
@@ -139,6 +159,8 @@ for (const [index, recipe] of recipes.entries()) {
     imageSha256: sha256(image),
     imageWidthPx: imageMeta.width,
     imageHeightPx: imageMeta.height,
+    imageVariantId: recipe.selectedImageVariantId || "original",
+    imageCrop: recipe.imageCrop || null,
     ingredientCount: recipe.ingredients.length,
     warnings: [
       ...issues
@@ -171,6 +193,8 @@ const sourceFingerprint = (items) =>
           totalTime: r.totalTime,
           cardRecipe: r.cardRecipe,
           imageId: r.imageId,
+          imageVariantId: r.selectedImageVariantId,
+          imageCrop: r.imageCrop,
           ingredients: r.ingredients,
         })),
       ),

@@ -23,11 +23,13 @@ import {
   oauth,
   readTokens,
   saveRecipe,
+  saveImageVariant,
   saveTokens,
   uploadImage,
   withRevisions,
 } from "./google.js";
 import { cachedImage, imageEtag, invalidateImage } from "./image-cache.js";
+import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
@@ -157,6 +159,41 @@ app.get(
     res.send(bytes);
   }),
 );
+app.get(
+  "/api/recipes/:id/images/:variantId",
+  sameOrigin,
+  asyncRoute(async (req, res) => {
+    const auth = authClient();
+    const recipe = (await imageCatalog(auth)).recipes.find(
+      (r) => r.id === req.params.id,
+    );
+    const variant = recipe?.imageVariants.find(
+      (v) => v.id === req.params.variantId,
+    );
+    if (!variant) return res.sendStatus(404);
+    const file = await findImageFile(auth, { imageId: variant.fileId });
+    if (!file) return res.sendStatus(404);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Cache-Control": "private, no-cache",
+      ETag: imageEtag(file),
+    });
+    if (req.fresh) return res.status(304).end();
+    res.send(await cachedImage(file, () => imageBytes(auth, file.id)));
+  }),
+);
+app.put(
+  "/api/recipes/:id/images/:variantId",
+  sameOrigin,
+  asyncRoute(async (req, res) => {
+    const recipe = await saveImageVariant(authClient(), req.params.id, {
+      ...req.body,
+      id: req.params.variantId,
+    });
+    imageCatalogCache = null;
+    res.json(recipe);
+  }),
+);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
@@ -180,12 +217,19 @@ app.post(
       (r) => r.id === req.params.id,
     );
     if (!recipe) return res.sendStatus(404);
-    const previousImageId = await findImage(auth, recipe);
     const imageId = await uploadImage(auth, recipe, req.file);
-    if (previousImageId) await invalidateImage(previousImageId);
     await invalidateImage(imageId);
+    const meta = await sharp(req.file.buffer).metadata();
+    const updated = await saveImageVariant(auth, recipe.id, {
+      id: crypto.randomUUID(),
+      fileId: imageId,
+      width: meta.width,
+      height: meta.height,
+      selected: true,
+      description: req.body.description || "",
+    });
     imageCatalogCache = null;
-    res.json({ imageId });
+    res.json({ imageId, recipe: updated });
   }),
 );
 async function exportRecipe(req) {
@@ -202,6 +246,18 @@ async function exportRecipe(req) {
     throw Object.assign(error, { status: 422 });
   }
   const auth = authClient();
+  const selectedRecipe = (await loadCatalog(auth)).recipes.find(
+    (r) => r.id === recipe.id,
+  );
+  if (!selectedRecipe)
+    throw Object.assign(new Error("Recept saknas."), { status: 404 });
+  recipe.imageId = selectedRecipe.imageId;
+  recipe.imageCrop =
+    recipe.selectedImageVariantId === selectedRecipe.selectedImageVariantId
+      ? recipe.imageCrop
+      : selectedRecipe.imageCrop;
+  recipe.imageWidth = selectedRecipe.imageWidth;
+  recipe.imageHeight = selectedRecipe.imageHeight;
   const file = await findImageFile(auth, recipe);
   if (file) {
     const bytes = await cachedImage(file, async () => {
@@ -210,6 +266,26 @@ async function exportRecipe(req) {
       return data;
     });
     const meta = await sharp(bytes).metadata();
+    if (
+      !meta.width ||
+      !meta.height ||
+      !cropLimits(meta.width, meta.height, recipe.printProfile).possible
+    )
+      throw Object.assign(
+        new Error(
+          "Bilden har för låg originalupplösning för vald tryckprofil.",
+        ),
+        { status: 422 },
+      );
+    if (recipe.imageCrop)
+      recipe.imageCrop = normalizeCrop(
+        recipe.imageCrop,
+        meta.width,
+        meta.height,
+        recipe.printProfile,
+      );
+    recipe.imageWidth = meta.width;
+    recipe.imageHeight = meta.height;
     recipe.imageDataUrl = `data:image/${meta.format === "jpeg" ? "jpeg" : meta.format};base64,${bytes.toString("base64")}`;
   }
   const issues = validateCard(recipe, recipe.printProfile);

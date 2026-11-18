@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { DEFAULT_PRINT_PROFILE, resolvePrintProfile } from "./print-profile.js";
 import { cardUnit, ingredientDisplayName } from "./ingredient-label.js";
 import { recipeType } from "./recipe-type.js";
+import { cropImageSvg } from "./image-crop.js";
 
 export const CARD = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 export const FRONT_STYLES = [
@@ -197,7 +198,11 @@ function contentTransform(profile) {
 export function renderCard(
   recipe,
   side,
-  { frontStyle = "panel", printProfile = DEFAULT_PRINT_PROFILE } = {},
+  {
+    frontStyle = "panel",
+    printProfile = DEFAULT_PRINT_PROFILE,
+    showCardGraphics = true,
+  } = {},
 ) {
   const profile = resolvePrintProfile(printProfile);
   const theme = cardTheme(recipe);
@@ -217,7 +222,13 @@ export function renderCard(
         if (qr.get(x, y))
           qrDots += `<rect x="${446 + x * dot}" y="${qrY + 15 + y * dot}" width="${dot + 0.08}" height="${dot + 0.08}"/>`;
     const photo = recipe.imageDataUrl
-      ? `<image href="${esc(recipe.imageDataUrl)}" x="0" y="0" width="${profile.widthUnits}" height="${profile.heightUnits}" preserveAspectRatio="xMidYMid slice"/>`
+      ? cropImageSvg(
+          esc(recipe.imageDataUrl),
+          recipe.imageCrop,
+          recipe.imageWidth,
+          recipe.imageHeight,
+          printProfile,
+        )
       : "";
     const variant =
       theme === CARD_THEMES.dessert
@@ -279,7 +290,7 @@ export function renderCard(
       theme,
       variant === "panel" ? layout.panelY + 8 : 645,
     );
-    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${icon}${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="${theme.qrPaper}"/><g fill="${theme.qrInk}">${qrDots}</g></g></g></svg>`;
+    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}${showCardGraphics ? `<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${icon}${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="${theme.qrPaper}"/><g fill="${theme.qrInk}">${qrDots}</g></g></g>` : ""}</svg>`;
   }
   const lines = recipe.ingredients || [];
   const rowHeight = lines.length > 10 ? 31 : 37;

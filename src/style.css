@@ -917,6 +917,118 @@ h3 {
   color: #36503c;
   font-size: 12px;
 }
+.image-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  gap: 10px;
+  margin: 15px 0;
+}
+.image-variant {
+  border: 2px solid #d5ded0;
+  border-radius: 9px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.image-variant.selected {
+  border-color: #36503c;
+  background: #eaf1e7;
+}
+.image-variant > button:first-child {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 5px;
+}
+.image-variant img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  display: block;
+}
+.image-variant strong,
+.image-variant small {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.image-variant .text-button {
+  border: 0;
+  color: #36503c;
+  background: transparent;
+  text-decoration: underline;
+  text-align: left;
+  padding: 2px 0;
+  font-size: 11px;
+}
+.image-large-dialog {
+  max-width: min(90vw, 900px);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 15px;
+  background: #f4f1e9;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.image-large-dialog img {
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+}
+.crop-original {
+  position: relative;
+  width: 100%;
+  line-height: 0;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+.crop-original > img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.crop-frame {
+  position: absolute;
+  border: 2px solid #fff;
+  outline: 1px solid #162a1b;
+  box-shadow: 0 0 0 100vmax #1118;
+  cursor: grab;
+  touch-action: none;
+}
+.crop-frame:active {
+  cursor: grabbing;
+}
+.crop-frame:focus-visible {
+  outline: 3px solid #f7ce54;
+}
+.crop-trim {
+  position: absolute;
+  border: 2px dashed #ed8d50;
+  pointer-events: none;
+}
+.crop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.crop-actions button {
+  border: 1px solid #adbeac;
+  border-radius: 6px;
+  background: #fff;
+  color: #253729;
+  padding: 6px 9px;
+}
+.crop-dpi {
+  margin: 10px 0 0;
+  font-weight: 700;
+  font-size: 12px;
+}
 .validation {
   border-top: 1px solid #cad4c7;
   margin-top: 23px;

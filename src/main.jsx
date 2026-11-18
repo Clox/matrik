@@ -13,6 +13,12 @@ import { previewPng, printLinesUrl } from "./preview-image.js";
 import WeeklyPlan from "./WeeklyPlan.jsx";
 import { normalizeWeekPlan } from "../shared/weekly-plan.js";
 import { filterRecipes, recipeType } from "../shared/recipe-type.js";
+import {
+  centeredCrop,
+  cropLimits,
+  effectiveDpi,
+  normalizeCrop,
+} from "../shared/image-crop.js";
 import "./style.css";
 
 async function json(url, options = {}) {
@@ -53,6 +59,19 @@ function toDataUrl(blob) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+function withImageState(current, updated, imageDataUrl = current.imageDataUrl) {
+  return {
+    ...current,
+    imageId: updated.imageId,
+    imageVariants: updated.imageVariants,
+    selectedImageVariantId: updated.selectedImageVariantId,
+    imageCrop: updated.imageCrop,
+    imageWidth: updated.imageWidth,
+    imageHeight: updated.imageHeight,
+    revision: updated.revision,
+    imageDataUrl,
+  };
 }
 function useCardImageUrls(cards) {
   const urls = useMemo(
@@ -112,6 +131,7 @@ function CardPreviewImage({
   );
 }
 function Preview({ recipe, frontStyle, printProfile }) {
+  const [showCardGraphics, setShowCardGraphics] = useState(true);
   const profile = useMemo(
     () => resolvePrintProfile(printProfile),
     [printProfile],
@@ -122,10 +142,14 @@ function Preview({ recipe, frontStyle, printProfile }) {
   );
   const cards = useMemo(
     () => ({
-      front: renderCard(recipe, "front", { frontStyle, printProfile }),
+      front: renderCard(recipe, "front", {
+        frontStyle,
+        printProfile,
+        showCardGraphics,
+      }),
       back: renderCard(recipe, "back", { printProfile }),
     }),
-    [recipe, frontStyle, printProfile],
+    [recipe, frontStyle, printProfile, showCardGraphics],
   );
   const cardUrls = useCardImageUrls(cards);
   const [expandedSide, setExpandedSide] = useState(null);
@@ -232,6 +256,14 @@ function Preview({ recipe, frontStyle, printProfile }) {
               onChange={(event) => setShowPrintLines(event.target.checked)}
             />
             Visa trycklinjer
+          </label>
+          <label className="trim-toggle">
+            <input
+              type="checkbox"
+              checked={showCardGraphics}
+              onChange={(event) => setShowCardGraphics(event.target.checked)}
+            />
+            Visa kortgrafik
           </label>
           <span
             className="print-zone-key"
@@ -351,6 +383,16 @@ function Preview({ recipe, frontStyle, printProfile }) {
                 />
                 Visa trycklinjer
               </label>
+              <label className="trim-toggle">
+                <input
+                  type="checkbox"
+                  checked={showCardGraphics}
+                  onChange={(event) =>
+                    setShowCardGraphics(event.target.checked)
+                  }
+                />
+                Visa kortgrafik
+              </label>
               <span
                 className="print-zone-key"
                 style={{ visibility: showPrintLines ? "visible" : "hidden" }}
@@ -400,6 +442,295 @@ function Preview({ recipe, frontStyle, printProfile }) {
         )}
       </div>
     </div>
+  );
+}
+function ImageVariants({
+  recipe,
+  profile,
+  onSelect,
+  onUpload,
+  onCropChange,
+  onCropCommit,
+  busy,
+}) {
+  const variants = recipe.imageVariants || [];
+  const current =
+    variants.find((v) => v.id === recipe.selectedImageVariantId) || variants[0];
+  const [largeImage, setLargeImage] = useState(null);
+  const imageRef = useRef(null);
+  const dragRef = useRef(null);
+  const width = Number(current?.width || recipe.imageWidth);
+  const height = Number(current?.height || recipe.imageHeight);
+  const limits = width && height ? cropLimits(width, height, profile) : null;
+  const crop =
+    recipe.imageCrop ||
+    (width && height ? centeredCrop(width, height, profile) : null);
+  const dpi =
+    crop && width && height
+      ? Math.floor(effectiveDpi(crop, width, height, profile))
+      : 0;
+  const update = (next, commit = false) => {
+    if (!limits?.possible) return;
+    const safe = normalizeCrop(next, width, height, profile);
+    onCropChange(safe);
+    if (commit) onCropCommit(safe);
+  };
+  const startDrag = (event) => {
+    if (!crop || !limits?.possible) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { x: event.clientX, y: event.clientY, crop };
+  };
+  const drag = (event) => {
+    if (!dragRef.current || !imageRef.current) return;
+    const rect = imageRef.current.getBoundingClientRect();
+    update({
+      ...dragRef.current.crop,
+      x:
+        dragRef.current.crop.x +
+        (event.clientX - dragRef.current.x) / rect.width,
+      y:
+        dragRef.current.crop.y +
+        (event.clientY - dragRef.current.y) / rect.height,
+    });
+  };
+  const stopDrag = () => {
+    if (dragRef.current) {
+      dragRef.current = null;
+      if (recipe.imageCrop) onCropCommit(recipe.imageCrop);
+    }
+  };
+  const zoom = (factor, commit = false) => {
+    if (!crop) return;
+    const nextHeight = crop.height * factor;
+    const nextWidth = (nextHeight * limits.ratio * height) / width;
+    update(
+      {
+        x: crop.x + (crop.width - nextWidth) / 2,
+        y: crop.y + (crop.height - nextHeight) / 2,
+        width: nextWidth,
+        height: nextHeight,
+      },
+      commit,
+    );
+  };
+  const nudge = (event) => {
+    const delta = event.shiftKey ? 0.01 : 0.002;
+    const move = {
+      ArrowLeft: [-delta, 0],
+      ArrowRight: [delta, 0],
+      ArrowUp: [0, -delta],
+      ArrowDown: [0, delta],
+    }[event.key];
+    if (!move || !crop) return;
+    event.preventDefault();
+    update({ ...crop, x: crop.x + move[0], y: crop.y + move[1] }, true);
+  };
+  return (
+    <>
+      <section className="paper image-variants-panel">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Fotografier</p>
+            <h3>Bildvarianter</h3>
+          </div>
+          <span>{variants.length} st</span>
+        </div>
+        <div className="image-variant-grid">
+          {variants.map((variant) => (
+            <div
+              className={`image-variant${variant.id === current?.id ? " selected" : ""}`}
+              key={variant.id}
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(variant)}
+                disabled={busy}
+                aria-label={`Välj bild ${variant.id}`}
+              >
+                <img
+                  src={`/api/recipes/${encodeURIComponent(recipe.id)}/images/${encodeURIComponent(variant.id)}`}
+                  alt={variant.description || `Bild ${variant.id}`}
+                  loading="lazy"
+                />
+              </button>
+              <strong>
+                {variant.id === current?.id
+                  ? "Vald bild"
+                  : variant.description || "Alternativ"}
+              </strong>
+              <small>
+                {variant.width && variant.height
+                  ? `${variant.width} × ${variant.height} px`
+                  : "Originalmått läses in"}
+              </small>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setLargeImage(variant)}
+              >
+                Visa större
+              </button>
+            </div>
+          ))}
+        </div>
+        <label className="field">
+          <span>Lägg till en ny bildvariant</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={busy}
+            onChange={(event) => {
+              onUpload(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+        </label>
+        {largeImage &&
+          createPortal(
+            <div className="card-overlay" onClick={() => setLargeImage(null)}>
+              <div
+                className="image-large-dialog"
+                role="dialog"
+                aria-modal="true"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button type="button" onClick={() => setLargeImage(null)}>
+                  Stäng
+                </button>
+                <img
+                  src={`/api/recipes/${encodeURIComponent(recipe.id)}/images/${encodeURIComponent(largeImage.id)}`}
+                  alt={largeImage.description || "Originalbild"}
+                />
+                <p>
+                  {largeImage.width} × {largeImage.height} px
+                </p>
+              </div>
+            </div>,
+            document.body,
+          )}
+      </section>
+      <section className="paper crop-panel">
+        <p className="eyebrow">Bildutsnitt</p>
+        <h3>Beskärning för kortet</h3>
+        {!current ? (
+          <p>Lägg till en bild för att justera utsnittet.</p>
+        ) : !limits?.possible ? (
+          <p className="notice">
+            Originalbilden är för liten för vald tryckprofil. Välj en bild med
+            högre upplösning.
+          </p>
+        ) : (
+          <>
+            <p>
+              Hela originalet visas. Dra den heldragna ramen. Den inre ramen är
+              kortet efter bleed.
+            </p>
+            <div className="crop-original" ref={imageRef}>
+              <img
+                src={
+                  recipe.imageDataUrl ||
+                  `/api/recipes/${encodeURIComponent(recipe.id)}/images/${encodeURIComponent(current.id)}`
+                }
+                alt="Hela originalbilden"
+                draggable="false"
+              />
+              {crop && (
+                <div
+                  className="crop-frame"
+                  tabIndex="0"
+                  role="slider"
+                  aria-label="Flytta bildutsnitt"
+                  aria-valuetext="Använd piltangenterna"
+                  onPointerDown={startDrag}
+                  onPointerMove={drag}
+                  onPointerUp={stopDrag}
+                  onPointerCancel={stopDrag}
+                  onKeyDown={nudge}
+                  onWheel={(event) => {
+                    event.preventDefault();
+                    zoom(event.deltaY < 0 ? 0.96 : 1.04, true);
+                  }}
+                  style={{
+                    left: `${crop.x * 100}%`,
+                    top: `${crop.y * 100}%`,
+                    width: `${crop.width * 100}%`,
+                    height: `${crop.height * 100}%`,
+                  }}
+                >
+                  <div
+                    className="crop-trim"
+                    style={{
+                      inset: `${(profile.bleedMm / profile.heightMm) * 100}% ${(profile.bleedMm / profile.widthMm) * 100}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="crop-actions">
+              <button type="button" onClick={() => zoom(1.08, true)}>
+                − Zoom
+              </button>
+              <button type="button" onClick={() => zoom(1 / 1.08, true)}>
+                + Zoom
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  update(centeredCrop(width, height, profile), true)
+                }
+              >
+                Centrera
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onCropChange(null);
+                  onCropCommit(null);
+                }}
+              >
+                Återställ
+              </button>
+            </div>
+            <label className="field">
+              <span>Zoom</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={
+                  limits.maxHeight === limits.minHeight
+                    ? 0
+                    : Math.round(
+                        ((limits.maxHeight - crop.height * height) /
+                          (limits.maxHeight - limits.minHeight)) *
+                          100,
+                      )
+                }
+                onChange={(event) => {
+                  const nextHeight =
+                    limits.maxHeight -
+                    (Number(event.target.value) / 100) *
+                      (limits.maxHeight - limits.minHeight);
+                  const nextWidth = (nextHeight * limits.ratio) / width;
+                  update({
+                    x: crop.x + (crop.width - nextWidth) / 2,
+                    y: crop.y + (crop.height - nextHeight / height) / 2,
+                    width: nextWidth,
+                    height: nextHeight / height,
+                  });
+                }}
+                onPointerUp={() => onCropCommit(recipe.imageCrop)}
+                onKeyUp={() => onCropCommit(recipe.imageCrop)}
+              />
+            </label>
+            <p className="crop-dpi">
+              Effektiv upplösning: {dpi} DPI · original {width} × {height} px
+            </p>
+          </>
+        )}
+      </section>
+    </>
   );
 }
 function Settings({
@@ -918,12 +1249,14 @@ function PreparationEditor({ preparations, options, hasPreparations, update }) {
   );
 }
 function App() {
+  const cropSaveTimer = useRef(null);
   const [status, setStatus] = useState(null),
     [statusError, setStatusError] = useState(null),
     [catalogRequest, setCatalogRequest] = useState({
       phase: "loading",
       data: null,
       error: null,
+      generation: 0,
     }),
     [selected, setSelected] = useState(null),
     [draft, setDraft] = useState(null),
@@ -1006,7 +1339,12 @@ function App() {
       const data = await json("/api/catalog");
       if (!Array.isArray(data.recipes))
         throw new Error("Receptregistret gav ett ogiltigt svar.");
-      setCatalogRequest({ phase: "success", data, error: null });
+      setCatalogRequest((current) => ({
+        phase: "success",
+        data,
+        error: null,
+        generation: current.generation + 1,
+      }));
     } catch (error) {
       setCatalogRequest({ phase: "error", data: null, error: error.message });
     }
@@ -1038,7 +1376,7 @@ function App() {
     return () => {
       live = false;
     };
-  }, [selected, catalog]);
+  }, [selected, catalogRequest.generation]);
   useEffect(() => {
     if (!draft) return;
     const timer = setTimeout(() => setPreview(structuredClone(draft)), 600);
@@ -1078,6 +1416,7 @@ function App() {
         phase: "success",
         data: updatedCatalog,
         error: null,
+        generation: catalogRequest.generation + 1,
       });
       setImageRefresh((current) => ({
         ...current,
@@ -1102,17 +1441,109 @@ function App() {
         body: form,
       });
       const data = await toDataUrl(file);
-      setDraft((d) => ({ ...d, imageId: result.imageId, imageDataUrl: data }));
+      setDraft((d) => withImageState(d, result.recipe, data));
+      setPreview((d) => withImageState(d, result.recipe, data));
+      setCatalogRequest((current) => ({
+        ...current,
+        data: {
+          ...current.data,
+          recipes: current.data.recipes.map((r) =>
+            r.id === draft.id ? result.recipe : r,
+          ),
+        },
+      }));
       setImageRefresh((current) => ({
         ...current,
         [draft.id]: (current[draft.id] || 0) + 1,
       }));
-      setMessage(
-        "Bilden finns i Drive. Spara receptet för att koppla bilden till raden i Sheet.",
-      );
+      setMessage("Bildvarianten är sparad i Drive och Google Sheets.");
     } catch (error) {
       setMessage(error.message);
     }
+  };
+  const selectImageVariant = async (variant) => {
+    if (!draft || variant.id === draft.selectedImageVariantId) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const updated = await json(
+        `/api/recipes/${draft.id}/images/${encodeURIComponent(variant.id)}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "x-matrik-csrf": status.csrf,
+          },
+          body: JSON.stringify({ selected: true, printProfile }),
+        },
+      );
+      const imageResponse = await fetch(
+        `/api/recipes/${draft.id}/images/${encodeURIComponent(variant.id)}`,
+      );
+      if (!imageResponse.ok)
+        throw new Error("Den valda bilden kunde inte läsas.");
+      const data = await toDataUrl(await imageResponse.blob());
+      setDraft((current) => withImageState(current, updated, data));
+      setPreview((current) => withImageState(current, updated, data));
+      setCatalogRequest((current) => ({
+        ...current,
+        data: {
+          ...current.data,
+          recipes: current.data.recipes.map((r) =>
+            r.id === updated.id ? updated : r,
+          ),
+        },
+      }));
+      setMessage("Bildvalet är sparat.");
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const changeCrop = (crop) => {
+    setDraft((current) => ({ ...current, imageCrop: crop }));
+    setPreview((current) => ({ ...current, imageCrop: crop }));
+  };
+  const commitCrop = (crop) => {
+    if (!draft?.selectedImageVariantId) return;
+    const recipeId = draft.id,
+      variantId = draft.selectedImageVariantId;
+    clearTimeout(cropSaveTimer.current);
+    cropSaveTimer.current = setTimeout(async () => {
+      try {
+        const updated = await json(
+          `/api/recipes/${recipeId}/images/${encodeURIComponent(variantId)}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "x-matrik-csrf": status.csrf,
+            },
+            body: JSON.stringify({ crop, printProfile }),
+          },
+        );
+        if (selected === recipeId) {
+          setDraft((current) =>
+            current?.id === recipeId
+              ? withImageState(current, updated)
+              : current,
+          );
+          setCatalogRequest((current) => ({
+            ...current,
+            data: {
+              ...current.data,
+              recipes: current.data.recipes.map((r) =>
+                r.id === updated.id ? updated : r,
+              ),
+            },
+          }));
+          setMessage("Beskärningen är sparad.");
+        }
+      } catch (error) {
+        setMessage(error.message);
+      }
+    }, 400);
   };
   const exportFile = async (target) => {
     setMessage("");
@@ -1462,14 +1893,6 @@ function App() {
                       rows={5}
                     />
                   )}
-                  <label className="field">
-                    <span>Rättbild i Drive</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={(e) => upload(e.target.files?.[0])}
-                    />
-                  </label>
                 </section>
                 <IngredientEditor
                   lines={draft.ingredients}
@@ -1488,6 +1911,15 @@ function App() {
                   recipe={preview || draft}
                   frontStyle={frontStyle}
                   printProfile={printProfile}
+                />
+                <ImageVariants
+                  recipe={draft}
+                  profile={resolvePrintProfile(printProfile)}
+                  onSelect={selectImageVariant}
+                  onUpload={upload}
+                  onCropChange={changeCrop}
+                  onCropCommit={commitCrop}
+                  busy={saving}
                 />
                 <div className="export-panel">
                   <p className="eyebrow">Exportera vid behov</p>

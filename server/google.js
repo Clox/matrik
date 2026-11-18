@@ -2,7 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { google } from "googleapis";
+import sharp from "sharp";
 import { SHEETS, makeCatalog, a1 } from "../shared/schema.js";
+import {
+  IMAGE_SHEET,
+  IMAGE_HEADERS,
+  attachImageVariants,
+  driveId,
+} from "../shared/image-variants.js";
+import { normalizeCrop } from "../shared/image-crop.js";
+import { DEFAULT_PRINT_PROFILE } from "../shared/print-profile.js";
 
 const localDir = path.resolve(".local");
 const tokenPath = path.join(localDir, "token.json");
@@ -101,6 +110,23 @@ export async function loadCatalog(auth) {
     ]),
   );
   const catalog = makeCatalog(data);
+  const sheetList = await sheets(auth).spreadsheets.get({
+    spreadsheetId,
+    fields: "sheets(properties(title))",
+  });
+  const hasImageSheet = sheetList.data.sheets?.some(
+    (sheet) => sheet.properties?.title === IMAGE_SHEET,
+  );
+  const imageValues = hasImageSheet
+    ? (
+        await sheets(auth).spreadsheets.values.get({
+          spreadsheetId,
+          range: q(IMAGE_SHEET),
+        })
+      ).data.values || []
+    : [];
+  attachImageVariants(catalog, imageValues);
+  catalog.imageSheetExists = Boolean(hasImageSheet);
   const validation = await sheets(auth).spreadsheets.get({
     spreadsheetId,
     ranges: [`${q(SHEETS.preparations)}!A2:J2`],
@@ -530,4 +556,226 @@ export async function uploadImage(auth, recipe, file) {
     fields: "id",
   });
   return result.data.id;
+}
+
+export async function backupSpreadsheet(auth, label) {
+  const backup = await drive(auth).files.copy({
+    fileId: spreadsheetId,
+    requestBody: {
+      name: `Matrik säkerhetskopia ${label} ${new Date().toISOString()}`,
+    },
+    fields: "id,name,webViewLink",
+  });
+  const dir = path.join(localDir, "image-variants", "backups");
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const file = path.join(
+    dir,
+    `${Date.now()}-${crypto.randomBytes(4).toString("hex")}.json`,
+  );
+  const catalog = await loadCatalog(auth);
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      backup: backup.data,
+      at: new Date().toISOString(),
+      snapshot: catalog.raw,
+      imageVariants: catalog.recipes.map((r) => ({
+        id: r.id,
+        imageId: r.imageId,
+        imageVariants: r.imageVariants,
+      })),
+    }),
+    { mode: 0o600 },
+  );
+  return backup.data;
+}
+
+export async function ensureImageSheet(auth) {
+  const current = await loadCatalog(auth);
+  if (current.imageSheetExists) return current;
+  await backupSpreadsheet(auth, "före Rätt-bilder");
+  const originalRecipes = current.recipes;
+  const originalRows = [];
+  for (const recipe of originalRecipes) {
+    const file = await findImageFile(auth, recipe);
+    if (!file)
+      throw new Error(
+        `${recipe.id}: befintlig bild kunde inte verifieras; ingen migration gjord.`,
+      );
+    const meta = await sharp(await imageBytes(auth, file.id)).metadata();
+    if (!meta.width || !meta.height)
+      throw new Error(
+        `${recipe.id}: originalmått saknas; ingen migration gjord.`,
+      );
+    originalRows.push([
+      recipe.id,
+      "original",
+      file.id,
+      "Ja",
+      meta.width,
+      meta.height,
+      "",
+      "Befintlig bild",
+    ]);
+  }
+  const rows = [IMAGE_HEADERS, ...originalRows];
+  await sheets(auth).spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          addSheet: {
+            properties: {
+              title: IMAGE_SHEET,
+              gridProperties: {
+                rowCount: Math.max(1000, rows.length + 20),
+                columnCount: IMAGE_HEADERS.length,
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+  await sheets(auth).spreadsheets.values.update({
+    spreadsheetId,
+    range: `${q(IMAGE_SHEET)}!A1:H${rows.length}`,
+    valueInputOption: "RAW",
+    requestBody: { values: rows },
+  });
+  return loadCatalog(auth);
+}
+
+export async function saveImageVariant(auth, recipeId, input) {
+  const catalog = await ensureImageSheet(auth);
+  const recipe = catalog.recipes.find((r) => r.id === recipeId);
+  if (!recipe)
+    throw Object.assign(new Error("Recept saknas."), { status: 404 });
+  const existing = recipe.imageVariants.find((v) => v.id === input.id);
+  const fileId = driveId(input.fileId || existing?.fileId);
+  if (existing && fileId !== existing.fileId)
+    throw Object.assign(
+      new Error(
+        "En bildvariant kan inte skrivas över. Lägg till en ny variant.",
+      ),
+      { status: 422 },
+    );
+  if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId))
+    throw Object.assign(new Error("Ogiltigt Drive-fil-ID."), { status: 422 });
+  const file = await findImageFile(auth, { imageId: fileId });
+  if (!file)
+    throw Object.assign(
+      new Error("Bildfilen finns inte i den tillåtna Drive-mappen."),
+      { status: 422 },
+    );
+  const id = existing?.id || String(input.id || crypto.randomUUID());
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id))
+    throw Object.assign(new Error("Ogiltigt variant-ID."), { status: 422 });
+  const actualMeta =
+    !existing || !existing.width || !existing.height
+      ? await sharp(await imageBytes(auth, fileId)).metadata()
+      : null;
+  const width = Number(actualMeta?.width || existing?.width);
+  const height = Number(actualMeta?.height || existing?.height);
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width < 1 ||
+    height < 1
+  )
+    throw Object.assign(new Error("Bildens originalmått saknas."), {
+      status: 422,
+    });
+  const crop = input.crop === undefined ? existing?.crop || null : input.crop;
+  const verifiedCrop = crop
+    ? normalizeCrop(
+        crop,
+        width,
+        height,
+        input.printProfile || DEFAULT_PRINT_PROFILE,
+      )
+    : null;
+  const row =
+    existing?.rowNumber ||
+    Math.max(
+      1,
+      ...catalog.recipes.flatMap((r) =>
+        r.imageVariants.map((v) => v.rowNumber || 1),
+      ),
+    ) + 1;
+  const variants = [
+    ...recipe.imageVariants.filter((v) => v.id !== id),
+    {
+      id,
+      fileId,
+      selected:
+        input.selected === undefined
+          ? Boolean(existing?.selected)
+          : Boolean(input.selected),
+      width,
+      height,
+      crop: verifiedCrop,
+      description: String(input.description ?? existing?.description ?? ""),
+      rowNumber: row,
+    },
+  ];
+  const selected = input.selected
+    ? variants.find((v) => v.id === id)
+    : variants.find((v) => v.selected) || variants[0];
+  const updates = [
+    {
+      range: `${q(IMAGE_SHEET)}!A${row}:H${row}`,
+      values: [
+        [
+          recipeId,
+          id,
+          fileId,
+          selected.id === id ? "Ja" : "Nej",
+          width,
+          height,
+          verifiedCrop ? JSON.stringify(verifiedCrop) : "",
+          String(input.description ?? existing?.description ?? ""),
+        ],
+      ],
+    },
+  ];
+  if (input.selected) {
+    for (const other of recipe.imageVariants)
+      if (other.id !== id && other.selected && other.rowNumber)
+        updates.push({
+          range: `${q(IMAGE_SHEET)}!D${other.rowNumber}`,
+          values: [["Nej"]],
+        });
+    const dishRow = catalog.raw.dishes.rows.find((r) => r.id === recipeId);
+    const column = catalog.raw.dishes.columns.imageId;
+    if (column >= 0)
+      updates.push({
+        range: a1(SHEETS.dishes, dishRow.rowNumber, column),
+        values: [[imageCellValue(catalog, fileId)]],
+      });
+  }
+  await sheets(auth).spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: { valueInputOption: "RAW", data: updates },
+  });
+  const updatedVariants = recipe.imageVariants.map((variant) =>
+    variant.id === id
+      ? { ...variants.find((v) => v.id === id), selected: selected.id === id }
+      : { ...variant, selected: variant.id === selected.id },
+  );
+  if (!existing)
+    updatedVariants.push({
+      ...variants.find((v) => v.id === id),
+      selected: selected.id === id,
+    });
+  const updatedRecipe = {
+    ...recipe,
+    imageVariants: updatedVariants,
+    selectedImageVariantId: selected.id,
+    imageId: selected.fileId,
+    imageCrop: selected.crop,
+    imageWidth: selected.width,
+    imageHeight: selected.height,
+  };
+  return { ...updatedRecipe, revision: revisionOf(updatedRecipe) };
 }
