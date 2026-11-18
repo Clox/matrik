@@ -20,6 +20,60 @@ export const FRONT_STYLES = [
     description: "Mjuk toning bara bakom texten",
   },
 ];
+const CARD_THEMES = {
+  maträtt: {
+    icon: "utensils",
+    panel: "#14221a",
+    panelOpacity: ".54",
+    qrPaper: "white",
+    qrInk: "#17251b",
+    back: {
+      paper: "#f9f7f0",
+      title: "#1e3327",
+      body: "#243a2b",
+      muted: "#657261",
+      rule: "#b9c3b6",
+      stripe: "#f4f1e9",
+      row: "white",
+      unit: "#617162",
+      accent: "#657261",
+      heading: "#243a2b",
+    },
+  },
+  dessert: {
+    icon: "ice-cream-bowl",
+    panel: "#B74379",
+    panelOpacity: ".94",
+    qrPaper: "#fff5f9",
+    qrInk: "#4d1f3b",
+    back: {
+      paper: "#fff7fa",
+      title: "#4e2340",
+      body: "#462d3c",
+      muted: "#79596e",
+      rule: "#d9a8bf",
+      stripe: "#fbe9f0",
+      row: "#fffdfd",
+      unit: "#79596e",
+      accent: "#a43d70",
+      heading: "#a43d70",
+    },
+  },
+};
+export function cardTheme(recipe) {
+  return String(recipe.type || "")
+    .trim()
+    .toLowerCase() === "dessert"
+    ? CARD_THEMES.dessert
+    : CARD_THEMES.maträtt;
+}
+function categoryIcon(theme, y) {
+  const paths =
+    theme.icon === "ice-cream-bowl"
+      ? '<path d="M7 13a9 9 0 0 1 18 0v2H7zM3 18h26l-4 12H7zM14 30h4v5h-4zM9 35h14v3H9z"/>'
+      : '<path d="M5 1h3v11h2V1h3v11h2V1h3v12a7 7 0 0 1-5 6.7V38h-4V19.7A7 7 0 0 1 4 13V1zM28 1c5 0 7 5 7 12v12h-5v13h-4V1z"/>';
+  return `<g data-category-icon="${theme.icon}" transform="translate(382 ${y})" fill="white">${paths}</g>`;
+}
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -146,6 +200,7 @@ export function renderCard(
   { frontStyle = "panel", printProfile = DEFAULT_PRINT_PROFILE } = {},
 ) {
   const profile = resolvePrintProfile(printProfile);
+  const theme = cardTheme(recipe);
   const id = esc(recipe.id || "");
   const rawTitle = recipe.shortName || recipe.name || "Namnlös rätt";
   const title = esc(rawTitle);
@@ -164,9 +219,12 @@ export function renderCard(
     const photo = recipe.imageDataUrl
       ? `<image href="${esc(recipe.imageDataUrl)}" x="0" y="0" width="${profile.widthUnits}" height="${profile.heightUnits}" preserveAspectRatio="xMidYMid slice"/>`
       : "";
-    const variant = FRONT_STYLES.some((style) => style.id === frontStyle)
-      ? frontStyle
-      : "panel";
+    const variant =
+      theme === CARD_THEMES.dessert
+        ? "panel"
+        : FRONT_STYLES.some((style) => style.id === frontStyle)
+          ? frontStyle
+          : "panel";
     const frontTitle = recipe.shortName || recipe.name || "Namnlös rätt";
     const compactTitleParts = wrap(frontTitle, variant === "panel" ? 12 : 15);
     const titleParts = (
@@ -195,23 +253,33 @@ export function renderCard(
               timeY: 828,
             }
         : { idY: 660, titleY: 728, titleStep: 54, timeY: 850 };
+    const dessertOutline =
+      theme === CARD_THEMES.dessert
+        ? 'stroke="#55263d" stroke-opacity=".82" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke fill"'
+        : "";
     const titleLines = titleParts
       .map(
         (line, i) =>
-          `<text x="66" y="${layout.titleY + i * layout.titleStep}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${fitText(line, 43, variant === "panel" ? 340 : 540)} ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : ""}>${esc(line)}</text>`,
+          `<text x="66" y="${layout.titleY + i * layout.titleStep}" fill="white" font-family="sans-serif" font-size="43" font-weight="700" ${fitText(line, 43, variant === "panel" ? 340 : 540)} ${variant === "direct" ? 'stroke="#17251b" stroke-opacity=".65" stroke-width="5" stroke-linejoin="round" paint-order="stroke fill"' : dessertOutline}>${esc(line)}</text>`,
       )
       .join("");
     const textOutline =
       variant === "direct"
         ? 'stroke="#17251b" stroke-opacity=".7" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill"'
-        : "";
+        : theme === CARD_THEMES.dessert
+          ? dessertOutline
+          : "";
     const textBackground =
       variant === "panel"
-        ? `<rect x="44" y="${layout.panelY}" width="384" height="${layout.panelHeight}" rx="12" fill="#14221a" fill-opacity=".54"/>`
+        ? `<rect x="44" y="${layout.panelY}" width="384" height="${layout.panelHeight}" rx="12" fill="${theme.panel}" fill-opacity="${theme.panelOpacity}"/>`
         : variant === "fade"
           ? '<rect x="28" y="590" width="425" height="310" fill="url(#textFade)"/>'
           : "";
-    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="white"/><g fill="#17251b">${qrDots}</g></g></g></svg>`;
+    const icon = categoryIcon(
+      theme,
+      variant === "panel" ? layout.panelY + 8 : 645,
+    );
+    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${icon}${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="${theme.qrPaper}"/><g fill="${theme.qrInk}">${qrDots}</g></g></g></svg>`;
   }
   const lines = recipe.ingredients || [];
   const rowHeight = lines.length > 10 ? 31 : 37;
@@ -231,7 +299,7 @@ export function renderCard(
             `<text x="${424 + i * 76}" y="${y + 24}" text-anchor="end" font-size="18" font-weight="600">${esc(quantity)}</text>`,
         )
         .join("");
-      return `<rect x="55" y="${y}" width="580" height="${rowHeight}" fill="${index % 2 ? "#f4f1e9" : "white"}"/><text x="66" y="${y + 24}" font-size="${nameSize}" ${fitText(label, nameSize, 255)}>${name}</text><text x="338" y="${y + 24}" font-size="17" fill="#617162">${esc(cardUnit(item, quantities))}</text>${cells}`;
+      return `<rect x="55" y="${y}" width="580" height="${rowHeight}" fill="${index % 2 ? theme.back.stripe : theme.back.row}"/><text x="66" y="${y + 24}" font-size="${nameSize}" ${fitText(label, nameSize, 255)}>${name}</text><text x="338" y="${y + 24}" font-size="17" fill="${theme.back.unit}">${esc(cardUnit(item, quantities))}</text>${cells}`;
     })
     .join("");
   const instructionY = backInstructionY(lines.length, rowHeight);
@@ -251,5 +319,5 @@ export function renderCard(
         `<text x="66" y="${instructionY + 36 + i * 25}" font-size="19" ${fitText(line, 19, 540)}>${esc(line)}</text>`,
     )
     .join("");
-  return `${svgStart(profile)}<rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="#f9f7f0"/><g transform="${contentTransform(profile)}"><text x="66" y="91" font-family="sans-serif" font-size="${backTitleSize}" font-weight="700" fill="#1e3327" ${fitText(backTitle, backTitleSize, 540)}>${title} · ${id}</text><text x="66" y="126" font-family="sans-serif" font-size="17" fill="#657261">${esc(backTimes)}</text><line x1="55" y1="143" x2="635" y2="143" stroke="#b9c3b6"/><g font-family="sans-serif" fill="#243a2b"><text x="66" y="168" font-size="14" fill="#657261">INGREDIENSER</text><text x="424" y="168" text-anchor="end" font-size="16">4</text><text x="500" y="168" text-anchor="end" font-size="16">6</text><text x="576" y="168" text-anchor="end" font-size="16">8</text>${rows}<text x="66" y="${instructionY}" font-size="20" font-weight="700">GÖR SÅ HÄR</text>${instructions}</g></g></svg>`;
+  return `${svgStart(profile)}<rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="${theme.back.paper}"/><g transform="${contentTransform(profile)}"><text x="66" y="91" font-family="sans-serif" font-size="${backTitleSize}" font-weight="700" fill="${theme.back.title}" ${fitText(backTitle, backTitleSize, 540)}>${title} · ${id}</text><text x="66" y="126" font-family="sans-serif" font-size="17" fill="${theme.back.muted}">${esc(backTimes)}</text><line x1="55" y1="143" x2="635" y2="143" stroke="${theme.back.rule}"/><g font-family="sans-serif" fill="${theme.back.body}"><text x="66" y="168" font-size="14" fill="${theme.back.accent}">INGREDIENSER</text><text x="424" y="168" text-anchor="end" font-size="16">4</text><text x="500" y="168" text-anchor="end" font-size="16">6</text><text x="576" y="168" text-anchor="end" font-size="16">8</text>${rows}<text x="66" y="${instructionY}" font-size="20" font-weight="700" fill="${theme.back.heading}">GÖR SÅ HÄR</text>${instructions}</g></g></svg>`;
 }

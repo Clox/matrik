@@ -4,6 +4,7 @@ import sharp from "sharp";
 import {
   CARD,
   FRONT_STYLES,
+  cardTheme,
   renderCard,
   scaledQuantity,
   validateCard,
@@ -228,6 +229,53 @@ test("baksidan har kompakt rubrik och inga tryckta trimmarkeringar", () => {
   assert.doesNotMatch(svg, /MATRIK/);
   assert.doesNotMatch(svg, /<rect x="30" y="30"/);
   assert.match(svg, /<text x="66" y="168"[^>]*>INGREDIENSER/);
+});
+test("recepttyp väljer korttema utan att ändra maträttens färger", () => {
+  const food = {
+    ...makeCatalog(fixture).recipes[0],
+    shortName: "Tacos",
+    activeTime: 20,
+  };
+  const dessert = {
+    ...food,
+    id: "D001",
+    type: "Dessert",
+    shortName: "Kladdkaka",
+  };
+  assert.equal(food.type, "Maträtt");
+  assert.equal(cardTheme(food).icon, "utensils");
+  assert.equal(cardTheme(dessert).icon, "ice-cream-bowl");
+  const foodFront = renderCard(food, "front");
+  const dessertFront = renderCard(dessert, "front");
+  assert.match(foodFront, /data-category-icon="utensils"/);
+  assert.match(foodFront, /fill="#14221a" fill-opacity="\.54"/);
+  assert.match(foodFront, /rx="10" fill="white"/);
+  assert.match(dessertFront, /data-category-icon="ice-cream-bowl"/);
+  const foodIcon = foodFront.match(
+    /data-category-icon="utensils" transform="translate\((\d+) (\d+)\)" fill="white"/,
+  );
+  const dessertIcon = dessertFront.match(
+    /data-category-icon="ice-cream-bowl" transform="translate\((\d+) (\d+)\)" fill="white"/,
+  );
+  assert.ok(foodIcon && dessertIcon);
+  assert.equal(foodIcon[1], dessertIcon[1]);
+  assert.ok(Number(foodIcon[1]) + 38 < 435);
+  assert.ok(Number(dessertIcon[1]) + 38 < 435);
+  assert.match(dessertFront, /fill="#B74379" fill-opacity="\.94"/);
+  assert.match(dessertFront, /rx="10" fill="#fff5f9"/);
+  assert.match(dessertFront, /<g fill="#4d1f3b">/);
+  assert.doesNotMatch(dessertFront, /data-category-icon="cake"/);
+  assert.match(renderCard(food, "back"), /fill="#f9f7f0"/);
+  const dessertBack = renderCard(dessert, "back");
+  assert.match(dessertBack, /fill="#fff7fa"/);
+  assert.match(dessertBack, /stroke="#d9a8bf"/);
+  assert.doesNotMatch(dessertBack, /print-zones-overlay|trim-guide|safe-guide/);
+});
+test("recepttyp kan läsas från en framtida valfri Sheet-kolumn", () => {
+  const data = structuredClone(fixture);
+  data.dishes[0].push("Recepttyp");
+  data.dishes[1].push("Dessert");
+  assert.equal(makeCatalog(data).recipes[0].type, "Dessert");
 });
 test("framsidesvarianterna behåller bilden utanför textytan", async () => {
   const recipe = makeCatalog(fixture).recipes[0];
