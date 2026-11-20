@@ -16,6 +16,7 @@ import {
   resolvePrintProfile,
 } from "../shared/print-profile.js";
 import { previewDimensions, printLinesSvg } from "../src/preview-image.js";
+import { backCardLayout, cardTextWidth } from "../shared/card-layout.js";
 
 const fixture = {
   dishes: [
@@ -239,7 +240,31 @@ test("baksidan har kompakt rubrik och inga tryckta trimmarkeringar", () => {
   assert.match(svg, /20 min aktiv · 25 min totalt/);
   assert.doesNotMatch(svg, /MATRIK/);
   assert.doesNotMatch(svg, /<rect x="30" y="30"/);
-  assert.match(svg, /<text x="66" y="168"[^>]*>INGREDIENSER/);
+  assert.match(svg, /<text x="69" y="169"[^>]*>INGREDIENSER/);
+  assert.doesNotMatch(svg, /GÖR SÅ HÄR/);
+  assert.match(svg, /<circle cx="73" cy="131" r="7"/);
+});
+test("baksidans text använder safe area och långa instruktioner klipps inte", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  recipe.shortName = "Hamburgare med pommes";
+  recipe.cardRecipe = Array.from({ length: 120 }, (_, i) => `Steg ${i + 1} ska synas.`).join(" ");
+  const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
+  const layout = backCardLayout(recipe, profile, scaledQuantity);
+  assert.equal(layout.safe, 63.5);
+  assert.equal(layout.titleRows.length, 2);
+  assert.ok(layout.timesY - layout.titleRows.at(-1).y >= 30);
+  assert.ok(cardTextWidth("Steg 120 ska synas.", 19) > 0);
+  assert.ok(layout.errors.some((message) => message.includes("safe area")));
+  assert.match(renderCard(recipe, "back"), /Steg 120 ska synas/);
+  assert.ok(validateCard(recipe).some((issue) => issue.level === "error"));
+});
+test("framsidan visar aktiv och total tid med klocka", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  recipe.activeTime = 30;
+  recipe.totalTime = 155;
+  const svg = renderCard(recipe, "front");
+  assert.match(svg, /30 min aktivt · 155 min totalt/);
+  assert.match(svg, /<circle cx="76" cy="/);
 });
 test("recepttyp väljer korttema utan att ändra maträttens färger", () => {
   const food = {

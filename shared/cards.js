@@ -3,6 +3,7 @@ import { DEFAULT_PRINT_PROFILE, resolvePrintProfile } from "./print-profile.js";
 import { cardUnit, cardIngredientName } from "./ingredient-label.js";
 import { recipeType } from "./recipe-type.js";
 import { cropImageSvg } from "./image-crop.js";
+import { backCardLayout } from "./card-layout.js";
 
 export const CARD = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 export const FRONT_STYLES = [
@@ -95,9 +96,6 @@ const fmt = (number) =>
   Number.isInteger(number)
     ? String(number)
     : String(Math.round(number * 10) / 10).replace(".", ",");
-const BACK_TABLE_Y = 178;
-const backInstructionY = (ingredientCount, rowHeight) =>
-  Math.max(BACK_TABLE_Y + ingredientCount * rowHeight + 48, 330);
 export function scaledQuantity(line, portions, baseServings) {
   const base = asNumber(line.quantity);
   const kind = String(line.scaling || "").toLowerCase();
@@ -133,7 +131,7 @@ function fitText(text, fontSize, maxWidth) {
     : "";
 }
 export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
-  resolvePrintProfile(profile);
+  const resolvedProfile = resolvePrintProfile(profile);
   const issues = [];
   const title = recipe.shortName || recipe.name || "";
   if (!title)
@@ -163,18 +161,9 @@ export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
       level: "warning",
       message: "Ett ingrediensnamn är långt och kan behöva förkortas.",
     });
-  const lines = wrap(recipe.cardRecipe || recipe.recipe, 57);
-  const rowHeight = (recipe.ingredients || []).length > 10 ? 31 : 37;
-  const instructionY = backInstructionY(
-    (recipe.ingredients || []).length,
-    rowHeight,
-  );
-  const available = Math.floor((860 - instructionY - 36) / 25) + 1;
-  if (lines.length > available)
-    issues.push({
-      level: "error",
-      message: "Instruktionerna får inte plats. Skriv ett kortrecept.",
-    });
+  for (const message of backCardLayout(recipe, resolvedProfile, scaledQuantity)
+    .errors)
+    issues.push({ level: "error", message });
   if (!recipe.cardRecipe && !recipe.recipe)
     issues.push({ level: "warning", message: "Kortet saknar instruktioner." });
   if (!recipe.imageDataUrl)
@@ -247,7 +236,7 @@ export function renderCard(
         ? panelHasTwoLines
           ? {
               panelY: 680,
-              panelHeight: recipe.activeTime ? 210 : 170,
+              panelHeight: recipe.activeTime || recipe.totalTime ? 210 : 170,
               idY: 716,
               titleY: 762,
               titleStep: 48,
@@ -255,7 +244,7 @@ export function renderCard(
             }
           : {
               panelY: 710,
-              panelHeight: recipe.activeTime ? 155 : 115,
+              panelHeight: recipe.activeTime || recipe.totalTime ? 155 : 115,
               idY: 738,
               titleY: 789,
               titleStep: 48,
@@ -288,45 +277,55 @@ export function renderCard(
       theme,
       variant === "panel" ? layout.panelY + 8 : 645,
     );
-    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}${showCardGraphics ? `<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${icon}${titleLines}<text x="66" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(recipe.activeTime ? `${recipe.activeTime} min aktiv tid` : "")}</text><rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="${theme.qrPaper}"/><g fill="${theme.qrInk}">${qrDots}</g></g></g>` : ""}</svg>`;
+    const frontTimes = [
+      recipe.activeTime ? `${recipe.activeTime} min aktivt` : "",
+      recipe.totalTime ? `${recipe.totalTime} min totalt` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const frontTime = frontTimes
+      ? `<g fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><circle cx="76" cy="${layout.timeY - 7}" r="8"/><path d="M76 ${layout.timeY - 12}v5l3 2"/></g><text x="92" y="${layout.timeY}" fill="white" font-family="sans-serif" font-size="19" ${textOutline}>${esc(frontTimes)}</text>`
+      : "";
+    return `${svgStart(profile)}<defs><linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#c78b52"/><stop offset="1" stop-color="#3c4738"/></linearGradient><radialGradient id="textFade"><stop stop-color="#14221a" stop-opacity=".66"/><stop offset=".68" stop-color="#14221a" stop-opacity=".38"/><stop offset="1" stop-color="#14221a" stop-opacity="0"/></radialGradient></defs><rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="url(#bg)"/>${photo}${showCardGraphics ? `<g transform="${contentTransform(profile)}"><g transform="translate(18 -17)">${textBackground}<text x="66" y="${layout.idY}" fill="white" font-family="sans-serif" font-size="22" letter-spacing="4" ${textOutline}>MATRIK · ${id}</text>${icon}${titleLines}${frontTime}<rect x="435" y="${qrY}" width="172" height="180" rx="10" fill="${theme.qrPaper}"/><g fill="${theme.qrInk}">${qrDots}</g></g></g>` : ""}</svg>`;
   }
-  const lines = recipe.ingredients || [];
-  const rowHeight = lines.length > 10 ? 31 : 37;
-  const tableY = BACK_TABLE_Y;
-  const rows = lines
-    .map((item, index) => {
-      const y = tableY + index * rowHeight;
-      const label = cardIngredientName(item);
-      const name = esc(label);
-      const nameSize = label === item.name ? 18 : 15;
-      const quantities = [4, 6, 8].map((portions) =>
-        scaledQuantity(item, portions, recipe.servings),
-      );
-      const cells = quantities
-        .map(
-          (quantity, i) =>
-            `<text x="${424 + i * 76}" y="${y + 24}" text-anchor="end" font-size="18" font-weight="600">${esc(quantity)}</text>`,
-        )
-        .join("");
-      return `<rect x="55" y="${y}" width="580" height="${rowHeight}" fill="${index % 2 ? theme.back.stripe : theme.back.row}"/><text x="66" y="${y + 24}" font-size="${nameSize}" ${fitText(label, nameSize, 255)}>${name}</text><text x="338" y="${y + 24}" font-size="17" fill="${theme.back.unit}">${esc(cardUnit(item, quantities))}</text>${cells}`;
-    })
-    .join("");
-  const instructionY = backInstructionY(lines.length, rowHeight);
-  const backTitleSize =
-    rawTitle.length <= 16 ? 43 : rawTitle.length <= 22 ? 34 : 27;
-  const backTitle = `${rawTitle} · ${recipe.id || ""}`;
-  const backTimes = [
-    recipe.activeTime ? `${recipe.activeTime} min aktiv` : "",
-    recipe.totalTime ? `${recipe.totalTime} min totalt` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const instructions = wrap(recipe.cardRecipe || recipe.recipe, 57)
-    .slice(0, Math.max(0, Math.floor((860 - instructionY - 36) / 25) + 1))
+  const layout = backCardLayout(recipe, profile, scaledQuantity);
+  const backTitle = layout.titleRows
     .map(
-      (line, i) =>
-        `<text x="66" y="${instructionY + 36 + i * 25}" font-size="19" ${fitText(line, 19, 540)}>${esc(line)}</text>`,
+      ({ text, x, y, size }) =>
+        `<text x="${x}" y="${y}" font-size="${size}" font-weight="700" fill="${theme.back.title}">${esc(text)}</text>`,
     )
     .join("");
-  return `${svgStart(profile)}<rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="${theme.back.paper}"/><g transform="${contentTransform(profile)}"><text x="66" y="91" font-family="sans-serif" font-size="${backTitleSize}" font-weight="700" fill="${theme.back.title}" ${fitText(backTitle, backTitleSize, 540)}>${title} · ${id}</text><text x="66" y="126" font-family="sans-serif" font-size="17" fill="${theme.back.muted}">${esc(backTimes)}</text><line x1="55" y1="143" x2="635" y2="143" stroke="${theme.back.rule}"/><g font-family="sans-serif" fill="${theme.back.body}"><text x="66" y="168" font-size="14" fill="${theme.back.accent}">INGREDIENSER</text><text x="424" y="168" text-anchor="end" font-size="16">4</text><text x="500" y="168" text-anchor="end" font-size="16">6</text><text x="576" y="168" text-anchor="end" font-size="16">8</text>${rows}<text x="66" y="${instructionY}" font-size="20" font-weight="700" fill="${theme.back.heading}">GÖR SÅ HÄR</text>${instructions}</g></g></svg>`;
+  const backTime = layout.times
+    ? `<g fill="none" stroke="${theme.back.muted}" stroke-width="1.8" stroke-linecap="round"><circle cx="${layout.left + 4}" cy="${layout.timesY - 6}" r="7"/><path d="M${layout.left + 4} ${layout.timesY - 10}v4l3 2"/></g><text x="${layout.left + 18}" y="${layout.timesY}" font-size="17" fill="${theme.back.muted}">${esc(layout.times)}</text>`
+    : "";
+  const headings = ["4", "6", "8"]
+    .map(
+      (value, index) =>
+        `<text x="${layout.columns[index]}" y="${layout.headingY}" text-anchor="end" font-size="16">${value}</text>`,
+    )
+    .join("");
+  const rows = layout.rows
+    .map((row, index) => {
+      const names = row.names
+        .map(
+          (name, line) =>
+            `<text x="${layout.left}" y="${row.y + 20 + line * 17}" font-size="${row.nameSize}">${esc(name)}</text>`,
+        )
+        .join("");
+      const values = row.quantities
+        .map(
+          (value, col) =>
+            `<text x="${layout.columns[col]}" y="${row.y + 20}" text-anchor="end" font-size="18" font-weight="700">${esc(value)}</text>`,
+        )
+        .join("");
+      return `<rect x="${layout.left - 14}" y="${row.y}" width="${layout.right - layout.left + 19}" height="${row.height}" fill="${index % 2 ? theme.back.stripe : theme.back.row}"/>${names}<text x="${layout.unitX}" y="${row.y + 20}" font-size="17" fill="${theme.back.unit}">${esc(row.unit)}</text>${values}`;
+    })
+    .join("");
+  const instructions = layout.instructions
+    .map(
+      ({ text, x, y }) =>
+        `<text x="${x}" y="${y}" font-size="19">${esc(text)}</text>`,
+    )
+    .join("");
+  return `${svgStart(profile)}<rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="${theme.back.paper}"/><g font-family="Noto Sans, sans-serif" fill="${theme.back.body}">${backTitle}${backTime}<line x1="${layout.left - 14}" x2="${layout.right + 5}" y1="${layout.ruleY}" y2="${layout.ruleY}" stroke="${theme.back.rule}"/><text x="${layout.left}" y="${layout.headingY}" font-size="14" fill="${theme.back.accent}">INGREDIENSER</text>${headings}${rows}<line x1="${layout.left - 4}" x2="${layout.right}" y1="${layout.dividerY}" y2="${layout.dividerY}" stroke="${theme.back.rule}" stroke-width="1.3"/>${instructions}</g></svg>`;
 }
