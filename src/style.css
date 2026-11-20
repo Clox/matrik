@@ -821,6 +821,46 @@ h3 {
   inset: 0;
   pointer-events: none;
 }
+.card-image-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #e8ece2;
+  color: #36503c;
+  font-size: 13px;
+  font-weight: 700;
+}
+.card-image-saving {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: #fffefaed;
+  color: #36503c;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 1px 5px #1b2c1c33;
+}
+.card-image-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid #b7c8b1;
+  border-top-color: #36503c;
+  border-radius: 50%;
+  animation: image-loading-spin 0.7s linear infinite;
+}
+@keyframes image-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .print-zone-key {
   color: #657261;
   font-size: 11px;
@@ -924,6 +964,7 @@ h3 {
   margin: 15px 0;
 }
 .image-variant {
+  position: relative;
   border: 2px solid #d5ded0;
   border-radius: 9px;
   padding: 5px;
@@ -936,18 +977,57 @@ h3 {
   border-color: #36503c;
   background: #eaf1e7;
 }
+.image-variant.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #36503c;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.image-variant.pending::after {
+  content: "";
+  width: 17px;
+  height: 17px;
+  border: 3px solid #b7c8b1;
+  border-top-color: #36503c;
+  background: #fff;
+  animation: image-loading-spin 0.7s linear infinite;
+}
 .image-variant > button:first-child {
   border: 0;
-  padding: 0;
+  padding: 0 0 4px;
   background: transparent;
-  overflow: hidden;
   border-radius: 5px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+}
+.image-variant > button:first-child:hover {
+  background: #e2edde;
+}
+.image-variant > button:first-child:focus-visible {
+  outline: 2px solid #36503c;
+  outline-offset: 2px;
 }
 .image-variant img {
   width: 100%;
   height: 100px;
   object-fit: cover;
   display: block;
+  border-radius: 5px;
 }
 .image-variant strong,
 .image-variant small {
@@ -962,6 +1042,12 @@ h3 {
   text-align: left;
   padding: 2px 0;
   font-size: 11px;
+}
+.image-variant-feedback {
+  min-height: 18px;
+  margin: -4px 0 12px;
+  color: #36503c;
+  font-size: 12px;
 }
 .image-large-dialog {
   max-width: min(90vw, 900px);
@@ -1118,6 +1204,40 @@ h3 {
   text-align: center;
   margin: 20vh auto;
   color: #647762;
+}
+@media (min-width: 1251px) {
+  .app.recipe-open {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app.recipe-open .main {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 24px;
+  }
+  .app.recipe-open .topbar {
+    flex: none;
+  }
+  .app.recipe-open .workspace {
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
+  }
+  .app.recipe-open .editor,
+  .app.recipe-open .right {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 20px;
+    scrollbar-gutter: stable;
+  }
+  .app.recipe-open .right {
+    position: static;
+  }
 }
 @media (max-width: 1250px) {
   .workspace {

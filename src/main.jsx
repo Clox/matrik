@@ -60,6 +60,31 @@ function toDataUrl(blob) {
     reader.readAsDataURL(blob);
   });
 }
+function loadedImageDataUrl(image) {
+  if (!image?.complete || !image.naturalWidth) return null;
+  try {
+    if (image.src.startsWith("data:")) return image.src;
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    canvas.getContext("2d").drawImage(image, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+async function variantDataUrl(recipeId, variantId, thumbnail) {
+  const loaded = loadedImageDataUrl(thumbnail);
+  if (loaded) return loaded;
+  const response = await fetch(
+    `/api/recipes/${encodeURIComponent(recipeId)}/images/${encodeURIComponent(variantId)}`,
+  );
+  if (!response.ok) throw new Error("Bilden kunde inte läsas. Försök igen.");
+  return toDataUrl(await response.blob());
+}
+function recipeImageKey(recipe) {
+  return `${recipe.id}:${recipe.imageId || recipe.selectedImageVariantId || ""}`;
+}
 function withImageState(current, updated, imageDataUrl = current.imageDataUrl) {
   return {
     ...current,
@@ -96,6 +121,8 @@ function CardPreviewImage({
   showBleed,
   showPrintLines,
   enlarged = false,
+  loading = false,
+  saving = false,
 }) {
   const bleed = profile.bleedMm;
   const imageStyle = showBleed
@@ -117,7 +144,12 @@ function CardPreviewImage({
       style={{ aspectRatio: `${profile.widthPx} / ${profile.heightPx}` }}
     >
       <span className="card-preview-surface" style={surfaceStyle}>
-        <img src={src} alt={alt} style={imageStyle} />
+        <img
+          src={src}
+          alt={loading ? "" : alt}
+          aria-hidden={loading}
+          style={imageStyle}
+        />
         {showPrintLines && (
           <img
             className="print-lines-overlay"
@@ -126,11 +158,28 @@ function CardPreviewImage({
             aria-hidden="true"
           />
         )}
+        {loading && (
+          <span className="card-image-loading" role="status">
+            <span className="card-image-spinner" aria-hidden="true" />
+            Byter bild…
+          </span>
+        )}
+        {saving && (
+          <span className="card-image-saving" role="status">
+            Sparar bildval…
+          </span>
+        )}
       </span>
     </span>
   );
 }
-function Preview({ recipe, frontStyle, printProfile }) {
+function Preview({
+  recipe,
+  frontStyle,
+  printProfile,
+  imageLoading = false,
+  imageSaving = false,
+}) {
   const [showCardGraphics, setShowCardGraphics] = useState(true);
   const profile = useMemo(
     () => resolvePrintProfile(printProfile),
@@ -288,6 +337,8 @@ function Preview({ recipe, frontStyle, printProfile }) {
               profile={profile}
               showBleed={showBleed}
               showPrintLines={showPrintLines}
+              loading={imageLoading}
+              saving={imageSaving}
             />
           </button>
           <p>Framsida</p>
@@ -407,12 +458,22 @@ function Preview({ recipe, frontStyle, printProfile }) {
                 showBleed={showBleed}
                 showPrintLines={showPrintLines}
                 enlarged
+                loading={imageLoading && expandedSide === "front"}
+                saving={imageSaving && expandedSide === "front"}
               />
               <div className="card-image-actions">
-                <button type="button" onClick={saveCard}>
+                <button
+                  type="button"
+                  onClick={saveCard}
+                  disabled={imageLoading || imageSaving}
+                >
                   Spara bild som PNG
                 </button>
-                <button type="button" onClick={copyCard}>
+                <button
+                  type="button"
+                  onClick={copyCard}
+                  disabled={imageLoading || imageSaving}
+                >
                   Kopiera bild som PNG
                 </button>
               </div>
@@ -452,10 +513,13 @@ function ImageVariants({
   onCropChange,
   onCropCommit,
   busy,
+  pendingVariantId,
+  feedback,
 }) {
   const variants = recipe.imageVariants || [];
   const current =
     variants.find((v) => v.id === recipe.selectedImageVariantId) || variants[0];
+  const displayedSelection = pendingVariantId || current?.id;
   const [largeImage, setLargeImage] = useState(null);
   const imageRef = useRef(null);
   const dragRef = useRef(null);
@@ -538,31 +602,30 @@ function ImageVariants({
         <div className="image-variant-grid">
           {variants.map((variant) => (
             <div
-              className={`image-variant${variant.id === current?.id ? " selected" : ""}`}
+              className={`image-variant${variant.id === displayedSelection ? " selected" : ""}${variant.id === pendingVariantId ? " pending" : ""}`}
               key={variant.id}
             >
               <button
                 type="button"
-                onClick={() => onSelect(variant)}
+                onClick={(event) =>
+                  onSelect(variant, event.currentTarget.querySelector("img"))
+                }
                 disabled={busy}
                 aria-label={`Välj bild ${variant.id}`}
+                aria-pressed={variant.id === displayedSelection}
               >
                 <img
                   src={`/api/recipes/${encodeURIComponent(recipe.id)}/images/${encodeURIComponent(variant.id)}`}
                   alt={variant.description || `Bild ${variant.id}`}
                   loading="lazy"
                 />
+                <strong>{variant.description || `Bild ${variant.id}`}</strong>
+                <small>
+                  {variant.width && variant.height
+                    ? `${variant.width} × ${variant.height} px`
+                    : "Originalmått läses in"}
+                </small>
               </button>
-              <strong>
-                {variant.id === current?.id
-                  ? "Vald bild"
-                  : variant.description || "Alternativ"}
-              </strong>
-              <small>
-                {variant.width && variant.height
-                  ? `${variant.width} × ${variant.height} px`
-                  : "Originalmått läses in"}
-              </small>
               <button
                 type="button"
                 className="text-button"
@@ -573,6 +636,9 @@ function ImageVariants({
             </div>
           ))}
         </div>
+        <p className="image-variant-feedback" role="status" aria-live="polite">
+          {feedback || "\u00a0"}
+        </p>
         <label className="field">
           <span>Lägg till en ny bildvariant</span>
           <input
@@ -612,9 +678,16 @@ function ImageVariants({
       <section className="paper crop-panel">
         <p className="eyebrow">Bildutsnitt</p>
         <h3>Beskärning för kortet</h3>
-        {!current ? (
+        {pendingVariantId ? (
+          <p>Byter bild… Beskärningen visas när bildvalet har sparats.</p>
+        ) : !current ? (
           <p>Lägg till en bild för att justera utsnittet.</p>
-        ) : !limits?.possible ? (
+        ) : !limits ? (
+          <p className="notice">
+            Bildens originalmått saknas i registret. Beskärning kan användas när
+            måtten har lästs in.
+          </p>
+        ) : !limits.possible ? (
           <p className="notice">
             Originalbilden är för liten för vald tryckprofil. Välj en bild med
             högre upplösning.
@@ -646,10 +719,6 @@ function ImageVariants({
                   onPointerUp={stopDrag}
                   onPointerCancel={stopDrag}
                   onKeyDown={nudge}
-                  onWheel={(event) => {
-                    event.preventDefault();
-                    zoom(event.deltaY < 0 ? 0.96 : 1.04, true);
-                  }}
                   style={{
                     left: `${crop.x * 100}%`,
                     top: `${crop.y * 100}%`,
@@ -1250,6 +1319,8 @@ function PreparationEditor({ preparations, options, hasPreparations, update }) {
 }
 function App() {
   const cropSaveTimer = useRef(null);
+  const editorScrollRef = useRef(null);
+  const rightScrollRef = useRef(null);
   const [status, setStatus] = useState(null),
     [statusError, setStatusError] = useState(null),
     [catalogRequest, setCatalogRequest] = useState({
@@ -1266,6 +1337,10 @@ function App() {
     [tagFilter, setTagFilter] = useState(""),
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false),
+    [pendingVariantId, setPendingVariantId] = useState(null),
+    [pendingRecipeId, setPendingRecipeId] = useState(null),
+    [pendingImageData, setPendingImageData] = useState(null),
+    [imageFeedback, setImageFeedback] = useState(""),
     [imageRefresh, setImageRefresh] = useState({}),
     [showSettings, setShowSettings] = useState(false),
     [showWeekPlan, setShowWeekPlan] = useState(false),
@@ -1279,6 +1354,26 @@ function App() {
         return [];
       }
     });
+  const imageDataCache = useRef(new Map());
+  const rememberImageData = (recipe, dataUrl) => {
+    if (!dataUrl) return;
+    const key = recipeImageKey(recipe);
+    imageDataCache.current.delete(key);
+    imageDataCache.current.set(key, dataUrl);
+    while (imageDataCache.current.size > 6)
+      imageDataCache.current.delete(imageDataCache.current.keys().next().value);
+  };
+  const cachedImageData = (recipe) => {
+    const key = recipeImageKey(recipe);
+    const cached = imageDataCache.current.get(key);
+    if (cached) return cached;
+    const sidebarImage = document.querySelector(
+      `.recipe-item[data-recipe-id="${recipe.id}"] img`,
+    );
+    const dataUrl = loadedImageDataUrl(sidebarImage);
+    if (dataUrl) rememberImageData(recipe, dataUrl);
+    return dataUrl;
+  };
   const catalog = catalogRequest.data;
   const [frontStyle, setFrontStyle] = useState(() => {
     try {
@@ -1356,14 +1451,21 @@ function App() {
     if (!selected || !catalog) return;
     const recipe = catalog.recipes.find((x) => x.id === selected);
     if (!recipe) return;
-    setDraft(structuredClone(recipe));
-    setPreview(structuredClone(recipe));
+    const cached = cachedImageData(recipe);
+    const initial = { ...structuredClone(recipe), imageDataUrl: cached };
+    setDraft(initial);
+    setPreview(initial);
+    if (cached) return;
     let live = true;
-    fetch(`/api/recipes/${encodeURIComponent(selected)}/image`)
+    const controller = new AbortController();
+    fetch(`/api/recipes/${encodeURIComponent(selected)}/image`, {
+      signal: controller.signal,
+    })
       .then((r) => (r.ok ? r.blob() : null))
       .then((blob) => blob && toDataUrl(blob))
       .then((data) => {
         if (live && data) {
+          rememberImageData(recipe, data);
           setDraft((d) =>
             d?.id === selected ? { ...d, imageDataUrl: data } : d,
           );
@@ -1375,8 +1477,13 @@ function App() {
       .catch(() => {});
     return () => {
       live = false;
+      controller.abort();
     };
   }, [selected, catalogRequest.generation]);
+  useEffect(() => {
+    editorScrollRef.current?.scrollTo(0, 0);
+    rightScrollRef.current?.scrollTo(0, 0);
+  }, [selected]);
   useEffect(() => {
     if (!draft) return;
     const timer = setTimeout(() => setPreview(structuredClone(draft)), 600);
@@ -1393,7 +1500,15 @@ function App() {
   );
   const edit = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const selectRecipe = (id) => {
+    const recipe = catalog?.recipes.find((r) => r.id === id);
+    if (recipe) {
+      const imageDataUrl = cachedImageData(recipe);
+      const initial = { ...structuredClone(recipe), imageDataUrl };
+      setDraft(initial);
+      setPreview(initial);
+    }
     setMessage("");
+    setImageFeedback("");
     setSelected(id);
     setShowSettings(false);
     setShowWeekPlan(false);
@@ -1461,13 +1576,26 @@ function App() {
       setMessage(error.message);
     }
   };
-  const selectImageVariant = async (variant) => {
-    if (!draft || variant.id === draft.selectedImageVariantId) return;
+  const selectImageVariant = async (variant, thumbnail) => {
+    if (!draft) return;
+    if (variant.id === draft.selectedImageVariantId) {
+      setImageFeedback("Den här bilden är redan vald.");
+      return;
+    }
+    const recipeId = draft.id;
     setSaving(true);
+    setPendingVariantId(variant.id);
+    setPendingRecipeId(recipeId);
+    setPendingImageData(null);
+    setImageFeedback(`Byter till ${variant.description || variant.id}…`);
     setMessage("");
     try {
+      const data = await variantDataUrl(recipeId, variant.id, thumbnail);
+      rememberImageData({ id: recipeId, imageId: variant.fileId }, data);
+      setPendingImageData({ recipeId, variantId: variant.id, dataUrl: data });
+      setImageFeedback("Sparar bildvalet…");
       const updated = await json(
-        `/api/recipes/${draft.id}/images/${encodeURIComponent(variant.id)}`,
+        `/api/recipes/${recipeId}/images/${encodeURIComponent(variant.id)}`,
         {
           method: "PUT",
           headers: {
@@ -1477,14 +1605,16 @@ function App() {
           body: JSON.stringify({ selected: true, printProfile }),
         },
       );
-      const imageResponse = await fetch(
-        `/api/recipes/${draft.id}/images/${encodeURIComponent(variant.id)}`,
+      setDraft((current) =>
+        current?.id === recipeId
+          ? withImageState(current, updated, data)
+          : current,
       );
-      if (!imageResponse.ok)
-        throw new Error("Den valda bilden kunde inte läsas.");
-      const data = await toDataUrl(await imageResponse.blob());
-      setDraft((current) => withImageState(current, updated, data));
-      setPreview((current) => withImageState(current, updated, data));
+      setPreview((current) =>
+        current?.id === recipeId
+          ? withImageState(current, updated, data)
+          : current,
+      );
       setCatalogRequest((current) => ({
         ...current,
         data: {
@@ -1494,10 +1624,13 @@ function App() {
           ),
         },
       }));
-      setMessage("Bildvalet är sparat.");
+      setImageFeedback("Bildvalet är sparat.");
     } catch (error) {
-      setMessage(error.message);
+      setImageFeedback(error.message);
     } finally {
+      setPendingVariantId(null);
+      setPendingRecipeId(null);
+      setPendingImageData(null);
       setSaving(false);
     }
   };
@@ -1618,7 +1751,9 @@ function App() {
       </main>
     );
   return (
-    <div className={`app ${showWeekPlan ? "week-open" : ""}`}>
+    <div
+      className={`app ${showWeekPlan ? "week-open" : ""} ${draft && !showWeekPlan && !showSettings ? "recipe-open" : ""}`}
+    >
       <aside className="sidebar">
         <div className="logo" aria-label="Matrik">
           <img src="/brand-mark.svg" alt="" />
@@ -1675,6 +1810,7 @@ function App() {
           {recipes.map((r) => (
             <button
               key={r.id}
+              data-recipe-id={r.id}
               className={`recipe-item ${selected === r.id && !showSettings && !showWeekPlan ? "active" : ""}`}
               onClick={() => selectRecipe(r.id)}
             >
@@ -1822,7 +1958,7 @@ function App() {
               </div>
             )}
             <div className="workspace">
-              <div className="editor">
+              <div className="editor" ref={editorScrollRef}>
                 <section className="paper">
                   <div className="section-head">
                     <div>
@@ -1906,13 +2042,44 @@ function App() {
                   update={(v) => edit("preparations", v)}
                 />
               </div>
-              <div className="right">
+              <div className="right" ref={rightScrollRef}>
                 <Preview
-                  recipe={preview || draft}
+                  recipe={
+                    pendingRecipeId === draft.id &&
+                    pendingVariantId &&
+                    pendingImageData?.recipeId === draft.id &&
+                    pendingImageData.variantId === pendingVariantId
+                      ? {
+                          ...(preview || draft),
+                          imageDataUrl: pendingImageData.dataUrl,
+                          imageCrop:
+                            draft.imageVariants.find(
+                              (variant) => variant.id === pendingVariantId,
+                            )?.crop || null,
+                          imageWidth: draft.imageVariants.find(
+                            (variant) => variant.id === pendingVariantId,
+                          )?.width,
+                          imageHeight: draft.imageVariants.find(
+                            (variant) => variant.id === pendingVariantId,
+                          )?.height,
+                        }
+                      : preview || draft
+                  }
                   frontStyle={frontStyle}
                   printProfile={printProfile}
+                  imageLoading={Boolean(
+                    pendingRecipeId === draft.id &&
+                    pendingVariantId &&
+                    !pendingImageData,
+                  )}
+                  imageSaving={Boolean(
+                    pendingRecipeId === draft.id &&
+                    pendingVariantId &&
+                    pendingImageData,
+                  )}
                 />
                 <ImageVariants
+                  key={draft.id}
                   recipe={draft}
                   profile={resolvePrintProfile(printProfile)}
                   onSelect={selectImageVariant}
@@ -1920,6 +2087,10 @@ function App() {
                   onCropChange={changeCrop}
                   onCropCommit={commitCrop}
                   busy={saving}
+                  pendingVariantId={
+                    pendingRecipeId === draft.id ? pendingVariantId : null
+                  }
+                  feedback={imageFeedback}
                 />
                 <div className="export-panel">
                   <p className="eyebrow">Exportera vid behov</p>
@@ -1932,7 +2103,10 @@ function App() {
                     utfall. PDF i faktisk storlek på A4.
                   </p>
                   <div className="export-buttons">
-                    <button onClick={() => exportFile("/api/export/png/front")}>
+                    <button
+                      disabled={Boolean(pendingVariantId)}
+                      onClick={() => exportFile("/api/export/png/front")}
+                    >
                       ↓ Framsida PNG
                     </button>
                     <button onClick={() => exportFile("/api/export/png/back")}>
