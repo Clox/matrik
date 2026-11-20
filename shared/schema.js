@@ -7,6 +7,7 @@ export const SHEETS = {
   tags: "Taggar",
   preparations: "Rätt-förberedelser",
 };
+export const ALTERNATIVE_SHEET = "Rätt-ingrediensalternativ";
 
 export const FIELDS = {
   dishes: {
@@ -75,6 +76,20 @@ export const FIELDS = {
     active: ["aktiv"],
     note: ["anteckning"],
   },
+  alternatives: {
+    dishId: ["rätt-id"],
+    standardIngredientId: ["standard-ingrediens-id"],
+    ingredientId: ["alternativ-ingrediens-id"],
+    quantity: ["basmängd"],
+    unit: ["enhet"],
+    scaling: ["skalningstyp"],
+    rounding: ["avrundning"],
+    purchaseUnit: ["inköpsenhet"],
+    packageSize: ["förpackningsstorlek"],
+    purchaseNote: ["inköpsnotering"],
+    preparation: ["tillagningsanpassning"],
+    enabled: ["valbar"],
+  },
 };
 
 export function normalize(value) {
@@ -122,6 +137,16 @@ export function makeCatalog(data) {
   const links = sheetRows(data.links, "links");
   const tags = sheetRows(data.tags, "tags");
   const preparations = sheetRows(data.preparations, "preparations");
+  const alternatives = data.alternatives?.length
+    ? sheetRows(data.alternatives, "alternatives")
+    : null;
+  if (
+    alternatives &&
+    Object.values(alternatives.columns).some((column) => column < 0)
+  )
+    throw new Error(
+      "Fliken Rätt-ingrediensalternativ saknar nödvändiga kolumner.",
+    );
   if (dishes.columns.id < 0 || dishes.columns.name < 0)
     throw new Error("Fliken Rätter behöver kolumner för Rätt-ID och Namn.");
   const recipeIds = dishes.rows.map((row) => row.id).filter(Boolean);
@@ -142,6 +167,38 @@ export function makeCatalog(data) {
       "Fliken Rätt-förberedelser saknar en eller flera av sina tio kolumner.",
     );
   const ingredientById = new Map(ingredients.rows.map((row) => [row.id, row]));
+  const linkKeys = new Set(
+    links.rows
+      .filter((row) => row.dishId && row.ingredientId)
+      .map((row) => `${row.dishId}:${row.ingredientId}`),
+  );
+  const alternativeKeys = new Set();
+  for (const option of alternatives?.rows || []) {
+    if (!parseBool(option.enabled)) continue;
+    const key = `${option.dishId}:${option.standardIngredientId}`;
+    const unique = `${key}:${option.ingredientId}`;
+    if (
+      !linkKeys.has(key) ||
+      !option.ingredientId ||
+      option.ingredientId === option.standardIngredientId
+    )
+      throw new Error(`Ogiltig alternativrelation på rad ${option.rowNumber}.`);
+    if (alternativeKeys.has(unique))
+      throw new Error(
+        `Dubbelt ingrediensalternativ på rad ${option.rowNumber}.`,
+      );
+    alternativeKeys.add(unique);
+    if (
+      !ingredientById.has(option.ingredientId) ||
+      !Number.isFinite(parseNumber(option.quantity, NaN)) ||
+      parseNumber(option.quantity, NaN) < 0 ||
+      !option.unit ||
+      !option.scaling
+    )
+      throw new Error(
+        `Ofullständigt ingrediensalternativ på rad ${option.rowNumber}.`,
+      );
+  }
   const recipes = dishes.rows
     .filter((row) => row.id)
     .map((row) => ({
@@ -198,6 +255,35 @@ export function makeCatalog(data) {
             purchaseUnit: link.purchaseUnit || ingredient?.purchaseUnit || "",
             packageSize: link.packageSize || ingredient?.packageSize || "",
             purchaseNote: link.purchaseNote || ingredient?.purchaseNote || "",
+            alternatives: (alternatives?.rows || [])
+              .filter(
+                (option) =>
+                  option.dishId === row.id &&
+                  option.standardIngredientId === link.ingredientId &&
+                  parseBool(option.enabled),
+              )
+              .map((option) => {
+                const item = ingredientById.get(option.ingredientId);
+                if (
+                  !item ||
+                  !Number.isFinite(parseNumber(option.quantity, NaN))
+                )
+                  throw new Error(
+                    `${row.id}: ogiltigt ingrediensalternativ ${option.ingredientId}.`,
+                  );
+                return {
+                  ingredientId: option.ingredientId,
+                  name: item.name,
+                  quantity: parseNumber(option.quantity),
+                  unit: option.unit,
+                  scaling: option.scaling,
+                  rounding: option.rounding,
+                  purchaseUnit: option.purchaseUnit || item.purchaseUnit,
+                  packageSize: option.packageSize || item.packageSize,
+                  purchaseNote: option.purchaseNote || item.purchaseNote,
+                  preparation: option.preparation,
+                };
+              }),
           };
         }),
     }));
@@ -215,8 +301,16 @@ export function makeCatalog(data) {
       ingredients: ingredients.columns,
       links: links.columns,
       preparations: preparations.columns,
+      ...(alternatives ? { alternatives: alternatives.columns } : {}),
     },
-    raw: { dishes, ingredients, links, tags, preparations },
+    raw: {
+      dishes,
+      ingredients,
+      links,
+      tags,
+      preparations,
+      ...(alternatives ? { alternatives } : {}),
+    },
   };
 }
 export function columnLetter(index) {

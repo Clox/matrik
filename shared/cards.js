@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { DEFAULT_PRINT_PROFILE, resolvePrintProfile } from "./print-profile.js";
-import { cardUnit, ingredientDisplayName } from "./ingredient-label.js";
+import { cardUnit, cardIngredientName } from "./ingredient-label.js";
 import { recipeType } from "./recipe-type.js";
 import { cropImageSvg } from "./image-crop.js";
 
@@ -158,9 +158,7 @@ export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
       level: "error",
       message: "Fler än 15 ingrediensrader får inte plats på baksidan.",
     });
-  if (
-    (recipe.ingredients || []).some((x) => ingredientDisplayName(x).length > 31)
-  )
+  if ((recipe.ingredients || []).some((x) => cardIngredientName(x).length > 31))
     issues.push({
       level: "warning",
       message: "Ett ingrediensnamn är långt och kan behöva förkortas.",
@@ -298,7 +296,7 @@ export function renderCard(
   const rows = lines
     .map((item, index) => {
       const y = tableY + index * rowHeight;
-      const label = ingredientDisplayName(item);
+      const label = cardIngredientName(item);
       const name = esc(label);
       const nameSize = label === item.name ? 18 : 15;
       const quantities = [4, 6, 8].map((portions) =>

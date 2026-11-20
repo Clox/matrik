@@ -402,7 +402,7 @@ test("granskad liknande rätt kan skapas separat bara när befintligt ID anges",
   assert.ok(buildImportPlan(makeCatalog(data), similar).conflicts.length > 0);
 });
 
-test("alternativ syns på kortet medan mängd och skalning fortsätter gälla kanonisk ingrediens", () => {
+test("kortet visar endast standardråvaran medan redigeraren visar alternativen", () => {
   const recipe = appliedCatalog(buildImportPlan(makeCatalog(data), proposal))
     .recipes[0];
   const ingredient = recipe.ingredients[0];
@@ -411,10 +411,8 @@ test("alternativ syns på kortet medan mängd och skalning fortsätter gälla ka
     "Fläskkarré / picnicbog / fläskbog",
   );
   assert.equal(scaledQuantity(ingredient, 6, 4), "1050");
-  assert.match(
-    renderCard(recipe, "back"),
-    /Fläskkarré \/ picnicbog \/ fläskbog/,
-  );
+  assert.match(renderCard(recipe, "back"), /Fläskkarré/);
+  assert.doesNotMatch(renderCard(recipe, "back"), /picnicbog/);
   assert.equal(
     ingredientDisplayName({ name: "Frysta wokgrönsaker", required: false }),
     "Frysta wokgrönsaker (valfri)",

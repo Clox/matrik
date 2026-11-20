@@ -112,7 +112,9 @@ test("alternativa varor väljs separat för två tillfällen av samma recept", (
   const choiceRecipe = {
     ...food,
     ingredients: [
-      ingredient("4", "Mjölk", 2, "dl", { note: "Alternativ: havremjölk" }),
+      ingredient("4", "Mjölk", 2, "dl", {
+        alternatives: [ingredient("5", "havremjölk", 2, "dl")],
+      }),
     ],
   };
   let plan = addPlanEntry([], choiceRecipe, "saturday", () => "first");

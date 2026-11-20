@@ -2,7 +2,7 @@ export function alternativeNote(line) {
   const alternatives = (
     Array.isArray(line.alternatives) ? line.alternatives : []
   )
-    .map((name) => String(name).trim())
+    .map((item) => String(item?.name || item).trim())
     .filter(Boolean);
   const note = String(line.note || "").trim();
   return [
@@ -14,12 +14,26 @@ export function alternativeNote(line) {
 }
 
 export function ingredientDisplayName(line) {
+  const structured = (line.alternatives || [])
+    .filter((item) => item && typeof item === "object" && item.ingredientId)
+    .map((item) => item.name);
   const match = /(?:^|;\s*)Alternativ:\s*([^;]+)/i.exec(
     String(line.note || ""),
   );
-  const name = match
-    ? `${line.name} / ${match[1].trim().replace(/\s*\/\s*/g, " / ")}`
-    : String(line.name || "");
+  const name = structured.length
+    ? `${String(line.name || "").split(/\s*\/\s*/)[0]} / ${structured.join(" / ")}`
+    : match
+      ? `${line.name} / ${match[1].trim().replace(/\s*\/\s*/g, " / ")}`
+      : String(line.name || "");
+  return line.required === false || line.required === "Nej"
+    ? `${name} (valfri)`
+    : name;
+}
+
+export function cardIngredientName(line) {
+  const name = String(line.name || "")
+    .split(/\s*\/\s*/)[0]
+    .trim();
   return line.required === false || line.required === "Nej"
     ? `${name} (valfri)`
     : name;

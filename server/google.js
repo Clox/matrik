@@ -3,7 +3,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { google } from "googleapis";
 import sharp from "sharp";
-import { SHEETS, makeCatalog, a1 } from "../shared/schema.js";
+import {
+  SHEETS,
+  ALTERNATIVE_SHEET,
+  makeCatalog,
+  a1,
+} from "../shared/schema.js";
 import {
   IMAGE_SHEET,
   IMAGE_HEADERS,
@@ -97,36 +102,55 @@ const sheets = (auth) => google.sheets({ version: "v4", auth });
 const drive = (auth) => google.drive({ version: "v3", auth });
 export async function loadCatalog(auth) {
   if (!spreadsheetId) throw new Error("GOOGLE_SPREADSHEET_ID saknas.");
-  const metadata = await sheets(auth).spreadsheets.get({
-    spreadsheetId,
-    ranges: [`${q(SHEETS.preparations)}!A2:J2`],
-    includeGridData: true,
-    fields: "sheets(properties(title),data(rowData(values(dataValidation))))",
-  });
-  const hasImageSheet = metadata.data.sheets?.some(
-    (sheet) => sheet.properties?.title === IMAGE_SHEET,
-  );
-  const ranges = [
-    ...Object.values(SHEETS).map(q),
-    ...(hasImageSheet ? [q(IMAGE_SHEET)] : []),
-  ];
-  const response = await sheets(auth).spreadsheets.values.batchGet({
-    spreadsheetId,
-    ranges,
-    valueRenderOption: "FORMATTED_VALUE",
-  });
+  const ranges = Object.values(SHEETS).map(q);
+  let hasImageSheet = true;
+  let response;
+  try {
+    response = await sheets(auth).spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges: [...ranges, q(IMAGE_SHEET)],
+      valueRenderOption: "FORMATTED_VALUE",
+    });
+  } catch (error) {
+    if (Number(error.code || error.response?.status) !== 400) throw error;
+    response = await sheets(auth).spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges,
+      valueRenderOption: "FORMATTED_VALUE",
+    });
+    hasImageSheet = false;
+  }
   const data = Object.fromEntries(
     Object.keys(SHEETS).map((key, i) => [
       key,
       response.data.valueRanges?.[i]?.values || [],
     ]),
   );
-  const catalog = makeCatalog(data);
   const imageValues = hasImageSheet
     ? response.data.valueRanges?.[Object.keys(SHEETS).length]?.values || []
     : [];
+  const metadata = await sheets(auth).spreadsheets.get({
+    spreadsheetId,
+    ranges: [`${q(SHEETS.preparations)}!A2:J2`],
+    includeGridData: true,
+    fields: "sheets(properties(title),data(rowData(values(dataValidation))))",
+  });
+  let hasAlternativeSheet = false;
+  try {
+    const alternatives = await sheets(auth).spreadsheets.values.get({
+      spreadsheetId,
+      range: q(ALTERNATIVE_SHEET),
+      valueRenderOption: "FORMATTED_VALUE",
+    });
+    data.alternatives = alternatives.data.values || [];
+    hasAlternativeSheet = true;
+  } catch (error) {
+    if (Number(error.code || error.response?.status) !== 400) throw error;
+  }
+  const catalog = makeCatalog(data);
   attachImageVariants(catalog, imageValues);
   catalog.imageSheetExists = Boolean(hasImageSheet);
+  catalog.alternativeSheetExists = Boolean(hasAlternativeSheet);
   const cells =
     metadata.data.sheets?.find(
       (sheet) => sheet.properties?.title === SHEETS.preparations,
@@ -309,6 +333,28 @@ export async function saveRecipe(auth, id, input) {
   const oldLinks = catalog.raw.links.rows.filter(
     (r) => r.dishId === id && r.ingredientId,
   );
+  for (const protectedLine of current.ingredients.filter(
+    (line) => line.alternatives?.length,
+  )) {
+    const matching = (input.ingredients || []).filter(
+      (line) => line.ingredientId === protectedLine.ingredientId,
+    );
+    if (
+      matching.length !== 1 ||
+      Number(String(matching[0].quantity).replace(",", ".")) !==
+        Number(protectedLine.quantity) ||
+      ["unit", "scaling", "rounding"].some(
+        (key) =>
+          String(matching[0][key] || "") !== String(protectedLine[key] || ""),
+      )
+    )
+      throw Object.assign(
+        new Error(
+          `${protectedLine.name} har registrerade alternativ. Ändra inte standardråvara eller dess mängd och skalning utan en kontrollerad datamigrering.`,
+        ),
+        { status: 409 },
+      );
+  }
   const oldPreparations = catalog.raw.preparations.rows.filter(
     (row) => row.dishId === id && row.id,
   );

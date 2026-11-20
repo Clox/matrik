@@ -2,10 +2,11 @@ import React, { useMemo, useState } from "react";
 import {
   applyIngredientChoice,
   formatAmount,
-  ingredientChoices,
+  ingredientOptions,
   lineKey,
   replacementFor,
   scaledAmount,
+  selectedIngredient,
   shoppingList,
 } from "../shared/shopping-list.js";
 import { grammaticalUnit } from "../shared/ingredient-label.js";
@@ -201,9 +202,10 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                   <div className="weekly-ingredient-list">
                     {recipe.ingredients.map((line, index) => {
                       const key = lineKey(line, index),
-                        options = ingredientChoices(line),
+                        options = ingredientOptions(line),
                         choice = entry.choices?.[key],
-                        included = selected(entry, line, index);
+                        included = selected(entry, line, index),
+                        chosen = selectedIngredient(line, choice);
                       const canToggle =
                         !line.required ||
                         recipe.ingredients.some(
@@ -224,19 +226,19 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                               }
                             />
                             <span>
-                              <strong>{line.name}</strong>
+                              <strong>{chosen.name}</strong>
                               <small>
                                 {formatAmount(
                                   scaledAmount(
-                                    line,
+                                    chosen,
                                     Number(entry.servings),
                                     recipe.servings,
                                   ),
                                 )}{" "}
                                 {grammaticalUnit(
-                                  line.unit,
+                                  chosen.unit,
                                   scaledAmount(
-                                    line,
+                                    chosen,
                                     Number(entry.servings),
                                     recipe.servings,
                                   ),
@@ -249,25 +251,29 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                             <label className="weekly-option">
                               <span>Välj vara</span>
                               <select
-                                value={
-                                  options.includes(choice?.name)
-                                    ? choice.name
-                                    : options[0]
-                                }
+                                value={chosen.ingredientId}
                                 disabled={!included}
                                 onChange={(event) =>
                                   updateChoice(entry, recipe, index, {
-                                    name: event.target.value,
+                                    ingredientId: event.target.value,
                                   })
                                 }
                               >
-                                {options.map((name) => (
-                                  <option key={name} value={name}>
-                                    {name}
+                                {options.map((option) => (
+                                  <option
+                                    key={option.ingredientId}
+                                    value={option.ingredientId}
+                                  >
+                                    {option.name}
                                   </option>
                                 ))}
                               </select>
                             </label>
+                          )}
+                          {chosen.preparation && (
+                            <small className="weekly-hint">
+                              {chosen.preparation}
+                            </small>
                           )}
                           {line.purchaseNote && (
                             <small className="weekly-hint">

@@ -18,23 +18,38 @@ export const formatAmount = (value) =>
   );
 
 export function ingredientChoices(line) {
-  const match = /(?:^|;\s*)Alternativ:\s*([^;]+)/i.exec(
-    String(line.note || ""),
+  return ingredientOptions(line).map((option) => option.name);
+}
+
+export function ingredientOptions(line) {
+  const standard = {
+    ...line,
+    name: String(line.name || "")
+      .split(/\s*\/\s*/)[0]
+      .trim(),
+  };
+  return [
+    standard,
+    ...(line.alternatives || []).filter(
+      (option) =>
+        option.ingredientId &&
+        option.name &&
+        option.unit &&
+        option.scaling &&
+        Number.isFinite(number(option.quantity)) &&
+        number(option.quantity) >= 0,
+    ),
+  ];
+}
+
+export function selectedIngredient(line, choice = {}) {
+  const options = ingredientOptions(line);
+  return (
+    (choice.ingredientId &&
+      options.find((option) => option.ingredientId === choice.ingredientId)) ||
+    (choice.name && options.find((option) => option.name === choice.name)) ||
+    options[0]
   );
-  const fromNote = match
-    ? match[1]
-        .split(/\s*\/\s*/)
-        .map((x) => x.trim())
-        .filter(Boolean)
-    : [];
-  const fromName =
-    !fromNote.length && String(line.name || "").includes("/")
-      ? line.name
-          .split(/\s*\/\s*/)
-          .map((x) => x.trim())
-          .filter(Boolean)
-      : [line.name];
-  return [...new Set([...fromName, ...fromNote])];
 }
 
 export function lineKey(line, index) {
@@ -166,14 +181,14 @@ export function shoppingList(recipes, plan) {
         (choice.included === undefined && !line.required)
       )
         continue;
-      const options = ingredientChoices(line);
-      const name = options.includes(choice.name) ? choice.name : options[0];
+      const selected = selectedIngredient(line, choice);
+      const name = selected.name;
       if (!name) continue;
-      const unit = String(line.unit || "")
+      const unit = String(selected.unit || "")
         .trim()
         .toLowerCase();
       const metric = measure(unit);
-      const amount = scaledAmount(line, servings, recipe.servings);
+      const amount = scaledAmount(selected, servings, recipe.servings);
       const key = `${normalize(name)}|${metric.family}`;
       if (!groups.has(key))
         groups.set(key, {
@@ -193,9 +208,10 @@ export function shoppingList(recipes, plan) {
         servings,
         amount,
         unit,
-        purchaseUnit: line.purchaseUnit || "",
-        packageSize: line.packageSize || "",
-        purchaseNote: line.purchaseNote || "",
+        purchaseUnit: selected.purchaseUnit || "",
+        packageSize: selected.packageSize || "",
+        purchaseNote: selected.purchaseNote || "",
+        preparation: selected.preparation || "",
       });
     }
   }

@@ -88,25 +88,128 @@ test("alternativ ersätter råvaran och valfria ingredienser kan väljas till", 
   const r = recipe("M001", [
     line("1", "Fläskkarré", 500, "g", {
       note: "Alternativ: picnicbog / fläskbog",
+      alternatives: [
+        line("2", "Picnicbog, benfri", 650, "g", {
+          preparation: "Sjud tills köttet är mört.",
+        }),
+      ],
     }),
-    line("2", "Svamp", 200, "g", { required: false }),
+    line("3", "Svamp", 200, "g", { required: false }),
   ]);
   assert.deepEqual(ingredientChoices(r.ingredients[0]), [
     "Fläskkarré",
-    "picnicbog",
-    "fläskbog",
+    "Picnicbog, benfri",
   ]);
   let plan = entry("M001");
   assert.deepEqual(
     shoppingList([r], [plan]).map((x) => x.name),
     ["Fläskkarré"],
   );
-  plan = applyIngredientChoice(plan, r, 0, { name: "picnicbog" });
+  plan = applyIngredientChoice(plan, r, 0, { ingredientId: "2" });
   plan = applyIngredientChoice(plan, r, 1, { included: true });
   assert.deepEqual(
     shoppingList([r], [plan]).map((x) => x.name),
-    ["picnicbog", "Svamp"],
+    ["Picnicbog, benfri", "Svamp"],
   );
+  for (const [servings, expected] of [
+    [4, 650],
+    [6, 975],
+    [8, 1300],
+  ]) {
+    const result = shoppingList([r], [{ ...plan, servings }]);
+    assert.equal(
+      result.find((item) => item.name === "Picnicbog, benfri").amount,
+      expected,
+    );
+  }
+});
+
+test("osäkra fritextalternativ väljs inte automatiskt", () => {
+  const r = recipe("M003", [
+    line("10", "Currysås", 2, "burk", {
+      note: "Alternativ: sötsur sås",
+    }),
+  ]);
+  assert.deepEqual(ingredientChoices(r.ingredients[0]), ["Currysås"]);
+  const plan = entry("M003", 4, { 10: { name: "sötsur sås" } });
+  assert.equal(shoppingList([r], [plan])[0].name, "Currysås");
+});
+
+test("smör i gram och matskedar hålls åtskilt", () => {
+  const r = recipe("M005", [
+    line("47", "Smör", 30, "g"),
+    line("7", "Smör/olja", 1, "msk"),
+  ]);
+  const list = shoppingList([r], [entry("M005")]);
+  assert.equal(list.filter((item) => item.name === "Smör").length, 2);
+});
+
+test("burksås får egen nettomängd utan att ärva standardens burkantal", () => {
+  const r = recipe("M003", [
+    line("30", "Färdig currysås", 2, "burk", {
+      scaling: "Hela enheter",
+      alternatives: [line("141", "Färdig sötsur sås", 800, "g")],
+    }),
+  ]);
+  const choices = { 30: { ingredientId: "141" } };
+  for (const [servings, amount] of [
+    [4, 800],
+    [6, 1200],
+    [8, 1600],
+  ]) {
+    const list = shoppingList([r], [entry("M003", servings, choices)]);
+    assert.deepEqual(
+      [list[0].name, list[0].amount, list[0].unit],
+      ["Färdig sötsur sås", amount, "g"],
+    );
+  }
+});
+
+test("hotdog kan vara styck i en rätt och gram i en annan", () => {
+  const a = recipe("M009", [
+    line("46", "Grillkorv", 8, "st", {
+      scaling: "Hela enheter",
+      alternatives: [
+        line("142", "Hotdog", 8, "st", { scaling: "Hela enheter" }),
+      ],
+    }),
+  ]);
+  const b = recipe("M041", [
+    line("46", "Grillkorv", 600, "g", {
+      alternatives: [line("142", "Hotdog", 600, "g")],
+    }),
+  ]);
+  const list = shoppingList(
+    [a, b],
+    [
+      entry("M009", 6, { 46: { ingredientId: "142" } }),
+      entry("M041", 8, { 46: { ingredientId: "142" } }),
+    ],
+  );
+  assert.deepEqual(
+    list
+      .map((item) => [item.amount, item.unit])
+      .sort((x, y) => x[1].localeCompare(y[1])),
+    [
+      [1200, "g"],
+      [12, "st"],
+    ],
+  );
+});
+
+test("avrunnen vikt för bönalternativ summeras som massa", () => {
+  const r = recipe("M031", [
+    line("92", "Kidneybönor", 2, "burkar", {
+      scaling: "Hela enheter",
+      alternatives: [line("143", "Svarta bönor, avrunna", 460, "g")],
+    }),
+  ]);
+  const list = shoppingList(
+    [r],
+    [entry("M031", 6, { 92: { ingredientId: "143" } })],
+  );
+  assert.equal(list[0].amount, 690);
+  assert.equal(list[0].unit, "g");
 });
 
 test("M013-liknande tillbehör väljer pommes eller rå potatis, aldrig båda", () => {
