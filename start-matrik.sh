@@ -11,14 +11,42 @@ open_page() {
   fi
 }
 
-# Återanvänd en redan startad lokal Matrik-instans.
+# Återanvänd en redan startad lokal Matrik-instans. En Vite-sida utan
+# fungerande API räknas inte som en startad app.
+existing_page=""
 for port in {5173..5199}; do
   url="http://127.0.0.1:$port/"
   if curl -fsS --max-time 1 "$url" 2>/dev/null | grep -Fq '<title>Matrik</title>'; then
-    open_page "$url"
-    exit 0
+    if curl -fsS --max-time 1 "${url}api/status" 2>/dev/null | grep -Fq '"driveConfigured"'; then
+      open_page "$url"
+      exit 0
+    fi
+    existing_page="$url"
+    break
   fi
 done
+
+if [[ -n "$existing_page" ]]; then
+  echo "Webbsidan körs, men API-servern svarar inte. Startar API-servern..."
+  npm run dev:server &
+  api_pid=$!
+  for _ in {1..20}; do
+    if curl -fsS --max-time 1 http://127.0.0.1:4173/api/status 2>/dev/null | grep -Fq '"driveConfigured"'; then
+      open_page "$existing_page"
+      wait "$api_pid"
+      exit $?
+    fi
+    if ! kill -0 "$api_pid" 2>/dev/null; then
+      wait "$api_pid"
+      exit $?
+    fi
+    sleep 1
+  done
+  echo "API-servern startade inte inom 20 sekunder." >&2
+  kill "$api_pid" 2>/dev/null || true
+  wait "$api_pid" 2>/dev/null || true
+  exit 1
+fi
 
 if curl -fsS --max-time 1 http://127.0.0.1:4173/ 2>/dev/null | grep -Fq '<title>Matrik</title>'; then
   open_page http://127.0.0.1:4173/

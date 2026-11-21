@@ -829,9 +829,8 @@ function ImageVariants({
               />
             </label>
             <p className="crop-dpi">
-              Effektiv fotoupplösning: {dpi} ppi (minst{" "}
-              {resolvePrintProfile(profile).minPhotoPpi} ppi) · original {width}{" "}
-              × {height} px
+              Effektiv fotoupplösning: {dpi} ppi (minst {profile.minPhotoPpi}{" "}
+              ppi) · original {width} × {height} px
             </p>
           </>
         )}
@@ -2205,4 +2204,35 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error)
+      return (
+        <main
+          style={{ margin: "15vh auto", padding: "2rem", maxWidth: "36rem" }}
+        >
+          <h1>Matrik kunde inte visa sidan</h1>
+          <p>{this.state.error.message}</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            Ladda om sidan
+          </button>
+        </main>
+      );
+    return this.props.children;
+  }
+}
+
+createRoot(document.getElementById("root")).render(
+  <AppErrorBoundary>
+    <App />
+  </AppErrorBoundary>,
+);
