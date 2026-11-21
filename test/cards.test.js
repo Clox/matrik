@@ -17,6 +17,7 @@ import {
 } from "../shared/print-profile.js";
 import { previewDimensions, printLinesSvg } from "../src/preview-image.js";
 import { backCardLayout, cardTextWidth } from "../shared/card-layout.js";
+import { renderSvgPng } from "../server/render-card-png.js";
 
 const fixture = {
   dishes: [
@@ -111,25 +112,24 @@ test("samma SVG kan renderas i preview och export i tryckstorlek", async () => {
   const svg = renderCard(recipe, "back");
   assert.match(svg, /Ingrediens A/);
   assert.match(svg, />750</);
-  const png = await sharp(Buffer.from(svg), { density: CARD.dpi })
-    .resize(CARD.widthPx, CARD.heightPx)
-    .png()
-    .toBuffer();
+  const png = await renderSvgPng(svg, DEFAULT_PRINT_PROFILE);
   const meta = await sharp(png).metadata();
-  assert.equal(meta.width, 822);
-  assert.equal(meta.height, 1122);
+  assert.equal(meta.width, 2192);
+  assert.equal(meta.height, 2992);
+  assert.ok(Math.abs(meta.density - 800) < 1);
 });
-test("MPC-profilen har 1/8 tum bleed och safe area samt minst 822 × 1122 px", () => {
+test("MPC-profilen skiljer 800 ppi export från 300 ppi fotokrav", () => {
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
   assert.equal(profile.trimWidthMm, 63);
   assert.equal(profile.trimHeightMm, 88);
   assert.equal(profile.bleedMm, 3.175);
   assert.equal(profile.safeMm, 3.175);
-  assert.equal(profile.dpi, 300);
+  assert.equal(profile.dpi, 800);
+  assert.equal(profile.minPhotoPpi, 300);
   assert.equal(profile.widthMm, 69.35);
   assert.equal(profile.heightMm, 94.35);
-  assert.equal(profile.widthPx, 822);
-  assert.equal(profile.heightPx, 1122);
+  assert.equal(profile.widthPx, 2192);
+  assert.equal(profile.heightPx, 2992);
   assert.ok(
     printProfileErrors({
       ...DEFAULT_PRINT_PROFILE,
@@ -187,12 +187,18 @@ test("hela kortnamnet visas även när två smala rader inte räcker", () => {
 test("bleed och trycklinjer är separata för trim- och exportvyn", () => {
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
   assert.deepEqual(previewDimensions(profile, false), {
-    width: 747,
-    height: 1043,
+    width: Math.round(
+      (profile.widthPx * profile.trimWidthMm) / profile.widthMm,
+    ),
+    height: Math.round(
+      (Math.round((profile.widthPx * profile.trimWidthMm) / profile.widthMm) *
+        profile.trimHeightMm) /
+        profile.trimWidthMm,
+    ),
   });
   assert.deepEqual(previewDimensions(profile, true), {
-    width: 822,
-    height: 1122,
+    width: 2192,
+    height: 2992,
   });
   const trimLines = printLinesSvg(profile, false);
   const bleedLines = printLinesSvg(profile, true);
@@ -218,8 +224,8 @@ test("egen tryckprofil styr SVG-mått och kräver tillräcklig upplösning", () 
     name: "Provprofil",
     trimWidthMm: 70,
     trimHeightMm: 100,
-    exportWidthPx: 1000,
-    exportHeightPx: 1300,
+    exportWidthPx: 2405,
+    exportHeightPx: 3350,
   };
   const profile = resolvePrintProfile(custom);
   assert.equal(profile.widthMm, 76.35);
@@ -247,7 +253,10 @@ test("baksidan har kompakt rubrik och inga tryckta trimmarkeringar", () => {
 test("baksidans text använder safe area och långa instruktioner klipps inte", () => {
   const recipe = makeCatalog(fixture).recipes[0];
   recipe.shortName = "Hamburgare med pommes";
-  recipe.cardRecipe = Array.from({ length: 120 }, (_, i) => `Steg ${i + 1} ska synas.`).join(" ");
+  recipe.cardRecipe = Array.from(
+    { length: 120 },
+    (_, i) => `Steg ${i + 1} ska synas.`,
+  ).join(" ");
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
   const layout = backCardLayout(recipe, profile, scaledQuantity);
   assert.equal(layout.safe, 63.5);
@@ -333,8 +342,9 @@ test("framsidesvarianterna behåller bilden utanför textytan", async () => {
   for (const style of FRONT_STYLES) {
     const svg = renderCard(recipe, "front", { frontStyle: style.id });
     assert.match(svg, /MATRIK · M007/);
-    const { data, info } = await sharp(Buffer.from(svg), { density: CARD.dpi })
-      .resize(CARD.widthPx, CARD.heightPx)
+    const { data, info } = await sharp(
+      await renderSvgPng(svg, DEFAULT_PRINT_PROFILE),
+    )
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
@@ -346,8 +356,14 @@ test("framsidesvarianterna behåller bilden utanför textytan", async () => {
         (y * info.width + x) * info.channels + 3,
       ),
     ];
-    assert.deepEqual(pixel(700, 700), sourceColor);
-    samples[style.id] = pixel(120, 900);
+    assert.deepEqual(
+      pixel(Math.round(info.width * 0.85), Math.round(info.height * 0.62)),
+      sourceColor,
+    );
+    samples[style.id] = pixel(
+      Math.round(info.width * 0.15),
+      Math.round(info.height * 0.8),
+    );
   }
   assert.deepEqual(samples.direct, sourceColor);
   assert.notDeepEqual(samples.panel, samples.direct);

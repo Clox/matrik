@@ -829,7 +829,9 @@ function ImageVariants({
               />
             </label>
             <p className="crop-dpi">
-              Effektiv upplösning: {dpi} DPI · original {width} × {height} px
+              Effektiv fotoupplösning: {dpi} ppi (minst{" "}
+              {resolvePrintProfile(profile).minPhotoPpi} ppi) · original {width}{" "}
+              × {height} px
             </p>
           </>
         )}
@@ -879,6 +881,7 @@ function Settings({
       bleedMm: Number(profileDraft.bleedMm),
       safeMm: Number(profileDraft.safeMm),
       dpi: Number(profileDraft.dpi),
+      minPhotoPpi: Number(profileDraft.minPhotoPpi ?? 300),
       exportWidthPx: Number(profileDraft.exportWidthPx),
       exportHeightPx: Number(profileDraft.exportHeightPx),
     });
@@ -1017,7 +1020,8 @@ function Settings({
             ["trimHeightMm", "Trim height (mm)", "0.001"],
             ["bleedMm", "Bleed per sida (mm)", "0.001"],
             ["safeMm", "Safe area innanför trim (mm)", "0.001"],
-            ["dpi", "DPI", "1"],
+            ["dpi", "Exportupplösning (ppi)", "1"],
+            ["minPhotoPpi", "Minsta effektiva fotoupplösning (ppi)", "1"],
             ["exportWidthPx", "Export width (px)", "1"],
             ["exportHeightPx", "Export height (px)", "1"],
           ].map(([key, label, step]) => (
@@ -1026,16 +1030,16 @@ function Settings({
               <input
                 type="number"
                 step={step}
-                value={profileDraft[key]}
+                value={profileDraft[key] ?? (key === "minPhotoPpi" ? 300 : "")}
                 onChange={(event) => setProfileField(key, event.target.value)}
               />
             </label>
           ))}
         </div>
         <p className="profile-note">
-          MakePlayingCards kräver minst 822 × 1122 px vid 300 DPI. Även egna
-          profiler måste ha minst så många pixlar som deras fysiska mått och DPI
-          kräver.
+          MPC:s dokumenterade minimum är 822 × 1122 px. Matrik exporterar
+          standardprofilen i 2192 × 2992 px vid 800 ppi. Fotots effektiva
+          upplösning kontrolleras separat mot minst 300 ppi.
         </p>
         {profileError && (
           <p className="profile-error" role="alert">
@@ -1430,6 +1434,7 @@ function App() {
       const saved = JSON.parse(
         localStorage.getItem("matrik.settings.printProfile"),
       );
+      if (saved?.id === DEFAULT_PRINT_PROFILE.id) return DEFAULT_PRINT_PROFILE;
       return printProfileErrors(saved).length ? DEFAULT_PRINT_PROFILE : saved;
     } catch {
       return DEFAULT_PRINT_PROFILE;
@@ -2139,7 +2144,7 @@ function App() {
                   <h3>Tryckfiler</h3>
                   <p>
                     {resolvePrintProfile(printProfile).name}: PNG i{" "}
-                    {resolvePrintProfile(printProfile).dpi} DPI,{" "}
+                    {resolvePrintProfile(printProfile).dpi} ppi export,{" "}
                     {resolvePrintProfile(printProfile).widthPx} ×{" "}
                     {resolvePrintProfile(printProfile).heightPx} px inklusive
                     utfall. PDF i faktisk storlek på A4.

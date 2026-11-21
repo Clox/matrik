@@ -8,6 +8,7 @@ import {
   centeredCrop,
   cropLimits,
   effectiveDpi,
+  minimumSourcePixels,
   normalizeCrop,
 } from "../shared/image-crop.js";
 import { renderCard } from "../shared/cards.js";
@@ -64,6 +65,37 @@ test("beskärningsramen täcker bleed, har rätt proportion och kan inte lämna 
     assert.ok(effectiveDpi(narrower, w, h, profile) >= 300);
   }
   assert.equal(cropLimits(800, 1100, profile).possible, false);
+});
+
+test("exportens upplösning påverkar inte fotots beskärningsgräns", () => {
+  const at800 = { ...profile };
+  const at600 = {
+    ...profile,
+    id: "custom",
+    dpi: 600,
+    exportWidthPx: 1640,
+    exportHeightPx: 2230,
+  };
+  assert.deepEqual(minimumSourcePixels(at800), minimumSourcePixels(at600));
+  assert.equal(cropLimits(1000, 1400, at800).possible, true);
+  assert.equal(
+    cropLimits(1000, 1400, { ...at800, id: "custom", minPhotoPpi: 400 })
+      .possible,
+    false,
+  );
+  const source = { x: 0.11, y: 0.08, width: 0.7, height: 0.7 };
+  assert.deepEqual(
+    normalizeCrop(source, 2048, 3072, at800),
+    normalizeCrop(source, 2048, 3072, at600),
+  );
+  assert.ok(
+    effectiveDpi(
+      normalizeCrop({ height: 0.001 }, 2048, 3072, at800),
+      2048,
+      3072,
+      at800,
+    ) >= 300,
+  );
 });
 
 test("förhandsvisning och tryckrendering använder exakt samma bildtransform", () => {

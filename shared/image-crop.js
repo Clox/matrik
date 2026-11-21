@@ -5,14 +5,8 @@ const profileOf = (input) =>
 export function minimumSourcePixels(profileInput) {
   const profile = profileOf(profileInput);
   return {
-    width: Math.max(
-      Math.ceil((profile.widthMm * profile.dpi) / 25.4),
-      profile.widthPx,
-    ),
-    height: Math.max(
-      Math.ceil((profile.heightMm * profile.dpi) / 25.4),
-      profile.heightPx,
-    ),
+    width: Math.ceil((profile.widthMm * profile.minPhotoPpi) / 25.4),
+    height: Math.ceil((profile.heightMm * profile.minPhotoPpi) / 25.4),
   };
 }
 
@@ -42,7 +36,7 @@ export function normalizeCrop(crop, width, height, profileInput) {
   const limits = cropLimits(width, height, profileInput);
   if (!limits.possible)
     throw new Error(
-      "Originalbilden är för liten för tryckprofilens DPI och minsta exportmått.",
+      "Originalbilden är för liten för tryckprofilens minsta foto-PPI.",
     );
   const requestedHeight = Number(crop?.height) * height;
   const cropHeight = Math.max(

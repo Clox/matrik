@@ -6,9 +6,10 @@ export const PRINT_PROFILES = [
     trimHeightMm: 88,
     bleedMm: 3.175,
     safeMm: 3.175,
-    dpi: 300,
-    exportWidthPx: 822,
-    exportHeightPx: 1122,
+    dpi: 800,
+    minPhotoPpi: 300,
+    exportWidthPx: 2192,
+    exportHeightPx: 2992,
   },
 ];
 
@@ -25,8 +26,11 @@ export function printProfileErrors(profile) {
     ["bleedMm", "Bleed", 0, 15],
     ["safeMm", "Safe area", 0, 20],
     ["dpi", "DPI", 150, 1200],
+    ["minPhotoPpi", "Minsta foto-PPI", 300, 1200],
   ]) {
-    const value = Number(profile[key]);
+    const value = Number(
+      key === "minPhotoPpi" ? (profile[key] ?? 300) : profile[key],
+    );
     if (!Number.isFinite(value) || value < min || value > max)
       errors.push(`${label} måste vara mellan ${min} och ${max}.`);
   }
@@ -80,6 +84,7 @@ export function resolvePrintProfile(profile = DEFAULT_PRINT_PROFILE) {
   const bleedMm = Number(profile.bleedMm);
   const safeMm = Number(profile.safeMm);
   const dpi = Number(profile.dpi);
+  const minPhotoPpi = Number(profile.minPhotoPpi ?? 300);
   const widthMm = trimWidthMm + 2 * bleedMm;
   const heightMm = trimHeightMm + 2 * bleedMm;
   return {
@@ -90,6 +95,7 @@ export function resolvePrintProfile(profile = DEFAULT_PRINT_PROFILE) {
     bleedMm,
     safeMm,
     dpi,
+    minPhotoPpi,
     widthMm,
     heightMm,
     widthPx: Number(profile.exportWidthPx),

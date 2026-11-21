@@ -12,6 +12,7 @@ import {
   loadCatalog,
 } from "../server/google.js";
 import { cachedImage } from "../server/image-cache.js";
+import { renderSvgPng } from "../server/render-card-png.js";
 import { renderCard, validateCard } from "../shared/cards.js";
 import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
 import {
@@ -85,7 +86,7 @@ for (const [index, recipe] of recipes.entries()) {
       .possible
   )
     throw new Error(
-      `${recipe.id}: Bildens originalpixlar räcker inte för DPI och exportmått efter beskärning.`,
+      `${recipe.id}: Bildens originalpixlar räcker inte för minsta foto-PPI efter beskärning.`,
     );
   if (
     recipe.imageWidth &&
@@ -123,11 +124,7 @@ for (const [index, recipe] of recipes.entries()) {
       frontStyle: "panel",
       printProfile: DEFAULT_PRINT_PROFILE,
     });
-    const png = await sharp(Buffer.from(svg), { density: profile.dpi })
-      .resize(profile.widthPx, profile.heightPx)
-      .png()
-      .withMetadata({ density: profile.dpi })
-      .toBuffer();
+    const png = await renderSvgPng(svg, DEFAULT_PRINT_PROFILE);
     const meta = await sharp(png).metadata();
     if (
       meta.width !== profile.widthPx ||

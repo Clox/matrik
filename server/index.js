@@ -30,6 +30,7 @@ import {
 } from "./google.js";
 import { cachedImage, imageEtag, invalidateImage } from "./image-cache.js";
 import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
+import { renderSvgPng } from "./render-card-png.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
@@ -302,19 +303,13 @@ async function exportRecipe(req) {
   return recipe;
 }
 async function png(recipe, side) {
-  const profile = resolvePrintProfile(recipe.printProfile);
-  return sharp(
-    Buffer.from(
-      renderCard(recipe, side, {
-        frontStyle: recipe.frontStyle,
-        printProfile: recipe.printProfile,
-      }),
-    ),
-    { density: profile.dpi },
-  )
-    .resize(profile.widthPx, profile.heightPx)
-    .png()
-    .toBuffer();
+  return renderSvgPng(
+    renderCard(recipe, side, {
+      frontStyle: recipe.frontStyle,
+      printProfile: recipe.printProfile,
+    }),
+    recipe.printProfile,
+  );
 }
 app.post(
   "/api/export/png/:side",
