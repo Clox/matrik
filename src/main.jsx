@@ -1085,6 +1085,9 @@ const blankLine = {
   name: "",
   displayName: "",
   quantity: "",
+  cardVisibility: "Visa",
+  quantityMode: "Exakt",
+  purchaseMode: "Beräkna",
   unit: "",
   required: true,
   note: "",
@@ -1094,7 +1097,7 @@ const blankLine = {
   packageSize: "",
   purchaseNote: "",
 };
-function IngredientEditor({ lines, options, update }) {
+function IngredientEditor({ lines, options, update, modesAvailable }) {
   const change = (index, key, value) =>
     update(
       lines.map((line, i) => (i === index ? { ...line, [key]: value } : line)),
@@ -1169,6 +1172,31 @@ function IngredientEditor({ lines, options, update }) {
             value={line.displayName || ""}
             onChange={(v) => change(i, "displayName", v)}
           />
+          {modesAvailable && (
+            <div className="ingredient-fields">
+              {[
+                ["cardVisibility", "Kortvisning", ["Visa", "Dölj"]],
+                ["quantityMode", "Mängdläge", ["Exakt", "Ungefärlig", "Ingen"]],
+                [
+                  "purchaseMode",
+                  "Inköpsläge",
+                  ["Beräkna", "Kontrollera hemma", "Utelämna"],
+                ],
+              ].map(([key, label, values]) => (
+                <label className="field" key={key}>
+                  <span>{label}</span>
+                  <select
+                    value={line[key] || values[0]}
+                    onChange={(event) => change(i, key, event.target.value)}
+                  >
+                    {values.map((value) => (
+                      <option key={value}>{value}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          )}
           <div className="ingredient-fields">
             <Field
               label="Basmängd"
@@ -2081,6 +2109,11 @@ function App() {
                   lines={draft.ingredients}
                   options={catalog.ingredientOptions}
                   update={(v) => edit("ingredients", v)}
+                  modesAvailable={[
+                    "cardVisibility",
+                    "quantityMode",
+                    "purchaseMode",
+                  ].every((key) => catalog.schema.links[key] >= 0)}
                 />
                 <PreparationEditor
                   preparations={draft.preparations}

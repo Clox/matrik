@@ -467,6 +467,38 @@ export async function saveRecipe(auth, id, input) {
   const ingredientIds = [...catalog.raw.ingredients.rows];
   const lines = [];
   for (const line of input.ingredients || []) {
+    const modes = {
+      cardVisibility: line.cardVisibility || "Visa",
+      quantityMode: line.quantityMode || "Exakt",
+      purchaseMode: line.purchaseMode || "Beräkna",
+    };
+    for (const [key, allowed] of [
+      ["cardVisibility", ["Visa", "Dölj"]],
+      ["quantityMode", ["Exakt", "Ungefärlig", "Ingen"]],
+      ["purchaseMode", ["Beräkna", "Kontrollera hemma", "Utelämna"]],
+    ]) {
+      if (!allowed.includes(modes[key]))
+        throw Object.assign(new Error(`Ogiltigt ${key}.`), { status: 422 });
+      if (catalog.raw.links.columns[key] < 0 && modes[key] !== allowed[0])
+        throw Object.assign(
+          new Error(
+            "Ingredienslägen kan sparas när Sheet-kolumnerna har lagts till.",
+          ),
+          { status: 422 },
+        );
+    }
+    if (
+      modes.quantityMode === "Exakt" &&
+      (String(line.quantity ?? "").trim() === "" ||
+        !Number.isFinite(Number(String(line.quantity).replace(",", "."))) ||
+        Number(String(line.quantity).replace(",", ".")) < 0)
+    )
+      throw Object.assign(
+        new Error("Exakt ingrediensmängd kräver ett tal minst 0."),
+        {
+          status: 422,
+        },
+      );
     let ingredientId = String(line.ingredientId || "");
     if (!ingredientId) {
       if (!line.name?.trim())
@@ -511,6 +543,24 @@ export async function saveRecipe(auth, id, input) {
             displayName:
               line.displayName ??
               (old?.ingredientId === line.ingredientId ? old.displayName : ""),
+            cardVisibility:
+              old?.cardVisibility === line.cardVisibility
+                ? old.cardVisibility
+                : line.cardVisibility === "Dölj"
+                  ? "Dölj"
+                  : "",
+            quantityMode:
+              old?.quantityMode === line.quantityMode
+                ? old.quantityMode
+                : ["Ungefärlig", "Ingen"].includes(line.quantityMode)
+                  ? line.quantityMode
+                  : "",
+            purchaseMode:
+              old?.purchaseMode === line.purchaseMode
+                ? old.purchaseMode
+                : ["Kontrollera hemma", "Utelämna"].includes(line.purchaseMode)
+                  ? line.purchaseMode
+                  : "",
             quantity: line.quantity,
             unit: line.unit,
             required: line.required ? "Ja" : "Nej",

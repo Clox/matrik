@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   applyIngredientChoice,
+  effectivePurchaseMode,
   formatAmount,
   ingredientOptions,
   lineKey,
@@ -34,6 +35,26 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
     [recipes],
   );
   const list = useMemo(() => shoppingList(recipes, plan), [recipes, plan]);
+  const [checkedItems, setCheckedItems] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("matrik.shoppingChecked") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(
+      "matrik.shoppingChecked",
+      JSON.stringify(checkedItems),
+    );
+  }, [checkedItems]);
+  const toggleChecked = (identity) =>
+    setCheckedItems((current) => ({
+      ...current,
+      [identity]: !current[identity],
+    }));
+  const measuredItems = list.filter((item) => !item.checkOnly);
+  const checkItems = list.filter((item) => item.checkOnly);
   const update = (entryId, change) =>
     setPlan((current) => updatePlanEntry(current, entryId, change));
   const updateChoice = (entry, recipe, index, patch) => {
@@ -228,20 +249,30 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                             <span>
                               <strong>{chosen.name}</strong>
                               <small>
-                                {formatAmount(
-                                  scaledAmount(
-                                    chosen,
-                                    Number(entry.servings),
-                                    recipe.servings,
-                                  ),
-                                )}{" "}
-                                {grammaticalUnit(
-                                  chosen.unit,
-                                  scaledAmount(
-                                    chosen,
-                                    Number(entry.servings),
-                                    recipe.servings,
-                                  ),
+                                {effectivePurchaseMode(line) ===
+                                "Kontrollera hemma" ? (
+                                  "Kontrollera hemma · mängd efter behov"
+                                ) : effectivePurchaseMode(line) ===
+                                  "Utelämna" ? (
+                                  "Ej på inköpslistan"
+                                ) : (
+                                  <>
+                                    {formatAmount(
+                                      scaledAmount(
+                                        chosen,
+                                        Number(entry.servings),
+                                        recipe.servings,
+                                      ),
+                                    )}{" "}
+                                    {grammaticalUnit(
+                                      chosen.unit,
+                                      scaledAmount(
+                                        chosen,
+                                        Number(entry.servings),
+                                        recipe.servings,
+                                      ),
+                                    )}
+                                  </>
                                 )}
                                 {!line.required ? " · valfri" : ""}
                               </small>
@@ -306,10 +337,23 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
             </p>
           )}
           <div className="weekly-shopping-list">
-            {list.map((item) => (
+            {measuredItems.map((item) => (
               <article className="weekly-shopping-item" key={item.key}>
                 <div className="weekly-shopping-top">
-                  <strong>{item.name}</strong>
+                  <strong>
+                    {item.checkSources?.length ? (
+                      <label className="weekly-check-label">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(checkedItems[item.identity])}
+                          onChange={() => toggleChecked(item.identity)}
+                        />
+                        {item.name}
+                      </label>
+                    ) : (
+                      item.name
+                    )}
+                  </strong>
                   <b>
                     {formatAmount(item.amount)}{" "}
                     {grammaticalUnit(item.unit, item.amount)}
@@ -335,9 +379,15 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                   {item.sources.map((source, index) => (
                     <span key={index}>
                       {source.recipeName} · {dayLabel(source.day)} (
-                      {formatAmount(source.amount)}{" "}
-                      {grammaticalUnit(source.unit, source.amount)})
-                      {index < item.sources.length - 1 ? " · " : ""}
+                      {source.checkOnly ? (
+                        "efter behov"
+                      ) : (
+                        <>
+                          {formatAmount(source.amount)}{" "}
+                          {grammaticalUnit(source.unit, source.amount)}
+                        </>
+                      )}
+                      ){index < item.sources.length - 1 ? " · " : ""}
                     </span>
                   ))}
                 </p>
@@ -347,6 +397,35 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
               </article>
             ))}
           </div>
+          {checkItems.length > 0 && (
+            <section
+              className="weekly-check-home"
+              aria-labelledby="weekly-check-home-title"
+            >
+              <h3 id="weekly-check-home-title">Kontrollera hemma</h3>
+              <p>Grundvaror utan exakt inköpsmängd.</p>
+              {checkItems.map((item) => (
+                <article className="weekly-shopping-item" key={item.key}>
+                  <label className="weekly-check-label">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checkedItems[item.identity])}
+                      onChange={() => toggleChecked(item.identity)}
+                    />
+                    <strong>{item.name}</strong>
+                  </label>
+                  <p className="weekly-sources">
+                    {item.sources.map((source, index) => (
+                      <span key={index}>
+                        {source.recipeName} · {dayLabel(source.day)}
+                        {index < item.sources.length - 1 ? " · " : ""}
+                      </span>
+                    ))}
+                  </p>
+                </article>
+              ))}
+            </section>
+          )}
         </section>
       </div>
     </div>

@@ -60,6 +60,9 @@ export const FIELDS = {
     purchaseUnit: ["inköpsenhet"],
     packageSize: ["förpackningsstorlek"],
     purchaseNote: ["inköpsnotering"],
+    cardVisibility: ["kortvisning"],
+    quantityMode: ["mängdläge"],
+    purchaseMode: ["inköpsläge"],
   },
   tags: {
     dishId: ["rätt-id", "rättid", "mat-id"],
@@ -248,7 +251,14 @@ export function makeCatalog(data) {
             ingredientId: link.ingredientId,
             name: ingredient?.name || `Ingrediens ${link.ingredientId}`,
             displayName: link.displayName || "",
-            quantity: parseNumber(link.quantity),
+            quantity:
+              link.quantity.trim() === "" &&
+              ["Ungefärlig", "Ingen"].includes(link.quantityMode)
+                ? ""
+                : parseNumber(link.quantity),
+            cardVisibility: link.cardVisibility || "Visa",
+            quantityMode: link.quantityMode || "Exakt",
+            purchaseMode: link.purchaseMode || "Beräkna",
             unit: link.unit || ingredient?.defaultUnit || "",
             required: parseBool(link.required),
             note: link.note,

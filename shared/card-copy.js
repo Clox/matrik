@@ -10,16 +10,18 @@ function cardContent(recipe) {
     ]
       .filter(Boolean)
       .join(" · "),
-    rows: (recipe.ingredients || []).map((line) => {
-      const quantities = [4, 6, 8].map((portions) =>
-        scaledQuantity(line, portions, recipe.servings),
-      );
-      return [
-        cardIngredientName(line),
-        cardUnit(line, quantities),
-        ...quantities,
-      ];
-    }),
+    rows: (recipe.ingredients || [])
+      .filter((line) => line.cardVisibility !== "Dölj")
+      .map((line) => {
+        const quantities = [4, 6, 8].map((portions) =>
+          scaledQuantity(line, portions, recipe.servings),
+        );
+        return [
+          cardIngredientName(line),
+          cardUnit(line, quantities),
+          ...quantities,
+        ];
+      }),
     instructions: String(recipe.cardRecipe || recipe.recipe || "").trim(),
   };
 }

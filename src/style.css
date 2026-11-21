@@ -391,6 +391,33 @@ h3 {
 .weekly-shopping-item .weekly-hint {
   margin-left: 0;
 }
+.weekly-check-home {
+  margin-top: 22px;
+  border-top: 2px solid #d9e4d5;
+  padding-top: 12px;
+}
+.weekly-check-home h3 {
+  margin: 0;
+  font-size: 17px;
+}
+.weekly-check-home > p {
+  color: #647563;
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+.weekly-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.weekly-check-label input {
+  accent-color: #365b3d;
+}
+.weekly-check-label:has(input:checked) {
+  color: #718070;
+  text-decoration: line-through;
+}
 .main {
   padding: 30px 36px 70px;
   min-width: 0;

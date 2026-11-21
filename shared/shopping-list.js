@@ -52,6 +52,32 @@ export function selectedIngredient(line, choice = {}) {
   );
 }
 
+// The two remaining Smör/olja relations use legacy ID 7 for Smör.
+// This reviewed, relation-specific alias is intentionally not a name match.
+// It lets M009's check-at-home Smör join ID 47 used by the potato mash.
+export function shoppingIngredientId(recipe, line, selected) {
+  if (
+    (recipe.id === "M009" || recipe.id === "M010") &&
+    line.ingredientId === "7" &&
+    selected.ingredientId === "7" &&
+    selected.name === "Smör" &&
+    recipe.ingredients.some(
+      (other) => other.ingredientId === "47" && other.name === "Smör",
+    )
+  )
+    return "47";
+  return selected.ingredientId || "";
+}
+
+export function effectivePurchaseMode(line) {
+  if (line.purchaseMode === "Utelämna") return "Utelämna";
+  if (line.quantityMode === "Ungefärlig" || line.quantityMode === "Ingen")
+    return "Kontrollera hemma";
+  return line.purchaseMode === "Kontrollera hemma"
+    ? "Kontrollera hemma"
+    : "Beräkna";
+}
+
 export function lineKey(line, index) {
   return line.ingredientId ? String(line.ingredientId) : `row:${index}`;
 }
@@ -164,6 +190,7 @@ function packageCount(group) {
 export function shoppingList(recipes, plan) {
   const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
   const groups = new Map();
+  const checks = new Map();
   for (const entry of plan) {
     const recipe = byId.get(entry.recipeId);
     const servings = number(entry.servings);
@@ -184,15 +211,53 @@ export function shoppingList(recipes, plan) {
       const selected = selectedIngredient(line, choice);
       const name = selected.name;
       if (!name) continue;
+      const mode = effectivePurchaseMode(line);
+      if (mode === "Utelämna") continue;
+      const ingredientId = shoppingIngredientId(recipe, line, selected);
+      // Without a stable ingredient ID, keep the relation separate. Names alone
+      // cannot establish that two shopping items are the same product.
+      const identity = ingredientId || `row:${recipe.id}:${lineKey(line, index)}`;
+      if (mode === "Kontrollera hemma") {
+        if (!checks.has(identity))
+          checks.set(identity, {
+            key: `check:${identity}`,
+            identity,
+            ingredientId,
+            name,
+            checkOnly: true,
+            amount: null,
+            unit: "",
+            family: "",
+            total: null,
+            sources: [],
+            purchaseUnits: [],
+            notes: [],
+            packages: null,
+          });
+        checks.get(identity).sources.push({
+          entryId: entry.id,
+          day: entry.day || "unscheduled",
+          recipeId: recipe.id,
+          recipeName: recipe.name,
+          servings,
+          amount: null,
+          unit: "",
+          checkOnly: true,
+          purchaseNote: selected.purchaseNote || "",
+        });
+        continue;
+      }
       const unit = String(selected.unit || "")
         .trim()
         .toLowerCase();
       const metric = measure(unit);
       const amount = scaledAmount(selected, servings, recipe.servings);
-      const key = `${normalize(name)}|${metric.family}`;
+      const key = `${identity}|${metric.family}`;
       if (!groups.has(key))
         groups.set(key, {
           key,
+          identity,
+          ingredientId,
           name,
           family: metric.family,
           total: 0,
@@ -215,33 +280,47 @@ export function shoppingList(recipes, plan) {
       });
     }
   }
-  return [...groups.values()]
-    .map((group) => {
-      const sourceUnits = group.sources.map((source) => source.unit);
-      const purchaseUnits = group.sources.map((source) =>
-        source.purchaseUnit.toLowerCase(),
-      );
-      const shown = display(
-        group.total,
-        group.family,
-        sourceUnits,
-        purchaseUnits,
-      );
-      return {
-        ...group,
-        ...shown,
-        packages: packageCount(group),
-        purchaseUnits: [
-          ...new Set(
-            group.sources.map((source) => source.purchaseUnit).filter(Boolean),
-          ),
-        ],
-        notes: [
-          ...new Set(
-            group.sources.map((source) => source.purchaseNote).filter(Boolean),
-          ),
-        ],
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, "sv-SE"));
+  const measured = [...groups.values()].map((group) => {
+    const sourceUnits = group.sources.map((source) => source.unit);
+    const purchaseUnits = group.sources.map((source) =>
+      source.purchaseUnit.toLowerCase(),
+    );
+    const shown = display(
+      group.total,
+      group.family,
+      sourceUnits,
+      purchaseUnits,
+    );
+    return {
+      ...group,
+      ...shown,
+      packages: packageCount(group),
+      purchaseUnits: [
+        ...new Set(
+          group.sources.map((source) => source.purchaseUnit).filter(Boolean),
+        ),
+      ],
+      notes: [
+        ...new Set(
+          group.sources.map((source) => source.purchaseNote).filter(Boolean),
+        ),
+      ],
+    };
+  });
+  for (const check of checks.values()) {
+    const measuredForItem = measured.find(
+      (item) => item.identity === check.identity,
+    );
+    if (measuredForItem) {
+      measuredForItem.checkSources = check.sources;
+      measuredForItem.sources.push(...check.sources);
+      measuredForItem.notes = [
+        ...new Set([
+          ...measuredForItem.notes,
+          "Kontrollera också hemma för användning efter behov.",
+        ]),
+      ];
+    } else measured.push(check);
+  }
+  return measured.sort((a, b) => a.name.localeCompare(b.name, "sv-SE"));
 }

@@ -97,13 +97,16 @@ const fmt = (number) =>
     ? String(number)
     : String(Math.round(number * 10) / 10).replace(".", ",");
 export function scaledQuantity(line, portions, baseServings) {
+  if (line.quantityMode === "Ingen" || line.quantity === "") return "";
   const base = asNumber(line.quantity);
   const kind = String(line.scaling || "").toLowerCase();
-  if (kind.includes("fast") || kind.includes("person")) return fmt(base);
+  if (kind.includes("fast") || kind.includes("person"))
+    return `${line.quantityMode === "Ungefärlig" ? "ca " : ""}${fmt(base)}`;
   const result = (base * portions) / (asNumber(baseServings) || 4);
-  if (kind.includes("hela")) return fmt(Math.ceil(result));
+  if (kind.includes("hela"))
+    return `${line.quantityMode === "Ungefärlig" ? "ca " : ""}${fmt(Math.ceil(result))}`;
   const step = asNumber(line.rounding);
-  return fmt(step > 0 ? Math.round(result / step) * step : result);
+  return `${line.quantityMode === "Ungefärlig" ? "ca " : ""}${fmt(step > 0 ? Math.round(result / step) * step : result)}`;
 }
 function wrap(text, maxChars) {
   const out = [];
@@ -151,12 +154,15 @@ export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
       level: "error",
       message: "Titeln behöver ett kortnamn som ryms på högst två rader.",
     });
-  if ((recipe.ingredients || []).length > 15)
+  const visibleIngredients = (recipe.ingredients || []).filter(
+    (line) => line.cardVisibility !== "Dölj",
+  );
+  if (visibleIngredients.length > 15)
     issues.push({
       level: "error",
       message: "Fler än 15 ingrediensrader får inte plats på baksidan.",
     });
-  if ((recipe.ingredients || []).some((x) => cardIngredientName(x).length > 31))
+  if (visibleIngredients.some((x) => cardIngredientName(x).length > 31))
     issues.push({
       level: "warning",
       message: "Ett ingrediensnamn är långt och kan behöva förkortas.",
