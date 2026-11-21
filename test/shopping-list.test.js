@@ -239,6 +239,65 @@ test("M013-liknande tillbehör väljer pommes eller rå potatis, aldrig båda", 
   );
 });
 
+test("M013 klyftpotatis kopplar rapsolja som kontrollvara, men pommes gör det inte", () => {
+  const r = recipe("M013", [
+    line("57", "Frysta pommes", 1000, "g"),
+    line("26", "Potatis", 1000, "g", {
+      required: false,
+      purchaseNote: "Köp i stället för frysta pommes.",
+    }),
+    line("140", "Rapsolja", 1, "msk", {
+      required: false,
+      quantityMode: "Ungefärlig",
+      purchaseMode: "Kontrollera hemma",
+    }),
+  ]);
+  for (const servings of [4, 6, 8]) {
+    let plan = entry("M013", servings);
+    assert.deepEqual(
+      shoppingList([r], [plan]).map((x) => x.name),
+      ["Frysta pommes"],
+    );
+    plan = applyIngredientChoice(plan, r, 1, { included: true });
+    const wedges = shoppingList([r], [plan]);
+    assert.equal(
+      wedges.some((x) => x.name === "Frysta pommes"),
+      false,
+    );
+    assert.equal(
+      wedges.find((x) => x.name === "Potatis").amount,
+      (1000 * servings) / 4,
+    );
+    assert.equal(wedges.find((x) => x.name === "Rapsolja").checkOnly, true);
+    plan = applyIngredientChoice(plan, r, 0, { included: true });
+    const fries = shoppingList([r], [plan]);
+    assert.equal(
+      fries.some((x) => x.name === "Rapsolja"),
+      false,
+    );
+    assert.deepEqual(
+      fries.map((x) => x.name),
+      ["Frysta pommes"],
+    );
+    const olderSavedChoice = entry("M013", servings, {
+      26: { included: true },
+    });
+    assert.equal(
+      shoppingList([r], [olderSavedChoice]).find((x) => x.name === "Rapsolja")
+        ?.checkOnly,
+      true,
+    );
+  }
+  const other = recipe("M999", r.ingredients);
+  const chosen = applyIngredientChoice(entry("M999"), other, 1, {
+    included: true,
+  });
+  assert.equal(
+    shoppingList([other], [chosen]).some((x) => x.name === "Rapsolja"),
+    false,
+  );
+});
+
 test("inköpsenhet utan förpackningsstorlek ger ingen påhittad förpackningsmängd", () => {
   const r = recipe("M007", [
     line("1", "Tortillabröd", 8, "st", { purchaseUnit: "förp" }),

@@ -94,6 +94,19 @@ export function replacementFor(recipe, line) {
   return found?.ingredientId || null;
 }
 
+// A selected optional ingredient can require a separate pantry item. Keep the
+// association by stable ingredient IDs so unrelated recipes and similar names
+// cannot acquire the companion accidentally.
+const companionRules = {
+  M013: [{ sourceId: "26", companionId: "140" }],
+};
+
+function companionSource(recipe, line) {
+  return (companionRules[recipe.id] || []).find(
+    (rule) => rule.companionId === line.ingredientId,
+  )?.sourceId;
+}
+
 export function applyIngredientChoice(entry, recipe, index, patch) {
   const line = recipe.ingredients[index];
   const key = lineKey(line, index);
@@ -101,6 +114,7 @@ export function applyIngredientChoice(entry, recipe, index, patch) {
     ...entry.choices,
     [key]: { ...entry.choices?.[key], ...patch },
   };
+  const changed = new Set([key]);
   if (patch.included === true) {
     const replaces = replacementFor(recipe, line);
     recipe.ingredients.forEach((other, otherIndex) => {
@@ -110,8 +124,20 @@ export function applyIngredientChoice(entry, recipe, index, patch) {
       ) {
         const otherKey = lineKey(other, otherIndex);
         choices[otherKey] = { ...choices[otherKey], included: false };
+        changed.add(otherKey);
       }
     });
+  }
+  for (const rule of companionRules[recipe.id] || []) {
+    const source = recipe.ingredients.find(
+      (item) => item.ingredientId === rule.sourceId,
+    );
+    const companion = recipe.ingredients.find(
+      (item) => item.ingredientId === rule.companionId,
+    );
+    if (!source || !companion || !changed.has(rule.sourceId)) continue;
+    const included = choices[rule.sourceId]?.included === true;
+    choices[rule.companionId] = { ...choices[rule.companionId], included };
   }
   return { ...entry, choices };
 }
@@ -203,11 +229,12 @@ export function shoppingList(recipes, plan) {
       continue;
     for (const [index, line] of recipe.ingredients.entries()) {
       const choice = entry.choices?.[lineKey(line, index)] || {};
-      if (
-        choice.included === false ||
-        (choice.included === undefined && !line.required)
-      )
-        continue;
+      const sourceId = companionSource(recipe, line);
+      const included =
+        choice.included ??
+        (sourceId ? entry.choices?.[sourceId]?.included : undefined) ??
+        line.required;
+      if (!included) continue;
       const selected = selectedIngredient(line, choice);
       const name = selected.name;
       if (!name) continue;
@@ -216,7 +243,8 @@ export function shoppingList(recipes, plan) {
       const ingredientId = shoppingIngredientId(recipe, line, selected);
       // Without a stable ingredient ID, keep the relation separate. Names alone
       // cannot establish that two shopping items are the same product.
-      const identity = ingredientId || `row:${recipe.id}:${lineKey(line, index)}`;
+      const identity =
+        ingredientId || `row:${recipe.id}:${lineKey(line, index)}`;
       if (mode === "Kontrollera hemma") {
         if (!checks.has(identity))
           checks.set(identity, {
