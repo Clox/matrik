@@ -50,6 +50,7 @@ export const FIELDS = {
   links: {
     dishId: ["rätt-id", "rättid", "mat-id", "rätt"],
     ingredientId: ["ingrediens-id", "ingrediensid", "ingrediens"],
+    displayName: ["visningsnamn"],
     quantity: ["basmängd", "mängd", "antal"],
     unit: ["enhet"],
     required: ["obligatorisk", "måste med"],
@@ -246,6 +247,7 @@ export function makeCatalog(data) {
           return {
             ingredientId: link.ingredientId,
             name: ingredient?.name || `Ingrediens ${link.ingredientId}`,
+            displayName: link.displayName || "",
             quantity: parseNumber(link.quantity),
             unit: link.unit || ingredient?.defaultUnit || "",
             required: parseBool(link.required),

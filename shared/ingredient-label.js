@@ -31,7 +31,7 @@ export function ingredientDisplayName(line) {
 }
 
 export function cardIngredientName(line) {
-  const name = String(line.name || "")
+  const name = String(line.displayName || line.name || "")
     .split(/\s*\/\s*/)[0]
     .trim();
   return line.required === false || line.required === "Nej"

@@ -118,3 +118,40 @@ test("ofullständiga eller lösa alternativ stoppas vid inläsning", () => {
     /Ofullständigt ingrediensalternativ/,
   );
 });
+
+test("receptspecifikt Visningsnamn syns på kort men inköpslistan behåller vald råvara", () => {
+  const fixture = structuredClone(data);
+  fixture.ingredients[1][1] = "Rapsolja";
+  fixture.ingredients[2][1] = "Smör";
+  fixture.links[1][2] = "2";
+  fixture.links[1][3] = "msk";
+  fixture.alternatives[1][3] = "2";
+  fixture.alternatives[1][4] = "msk";
+  fixture.links[0].push("Visningsnamn");
+  fixture.links[1].push("Matfett");
+  const recipe = makeCatalog(fixture).recipes[0];
+  const line = recipe.ingredients[0];
+  assert.equal(cardIngredientName(line), "Matfett");
+  assert.match(renderCard(recipe, "back"), /Matfett/);
+  for (const servings of [4, 6, 8]) {
+    const list = shoppingList(
+      [recipe],
+      [{ id: "one", recipeId: recipe.id, servings, choices: {} }],
+    );
+    assert.equal(list[0].name, "Rapsolja");
+    assert.equal(list[0].amount, (2 * servings) / 4);
+    const alternative = shoppingList(
+      [recipe],
+      [
+        {
+          id: "one",
+          recipeId: recipe.id,
+          servings,
+          choices: { 28: { ingredientId: "140" } },
+        },
+      ],
+    );
+    assert.equal(alternative[0].name, "Smör");
+    assert.equal(alternative[0].amount, (2 * servings) / 4);
+  }
+});

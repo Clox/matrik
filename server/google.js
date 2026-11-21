@@ -508,6 +508,9 @@ export async function saveRecipe(auth, id, input) {
         ? {
             dishId: id,
             ingredientId: line.ingredientId,
+            displayName:
+              line.displayName ??
+              (old?.ingredientId === line.ingredientId ? old.displayName : ""),
             quantity: line.quantity,
             unit: line.unit,
             required: line.required ? "Ja" : "Nej",

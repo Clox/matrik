@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
+import { backCardHtml, backCardMarkdown } from "../shared/card-copy.js";
 import { ingredientDisplayName } from "../shared/ingredient-label.js";
 import {
   DEFAULT_PRINT_PROFILE,
@@ -247,6 +248,35 @@ function Preview({
       setCopyMessage(`Kunde inte kopiera bilden: ${error.message}`);
     }
   };
+  const copyBackText = async () => {
+    if (!navigator.clipboard?.write && !navigator.clipboard?.writeText) {
+      setCopyMessage("Textkopiering stöds inte i den här webbläsaren.");
+      return;
+    }
+    try {
+      const markdown = backCardMarkdown(recipe);
+      if (navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([backCardHtml(recipe)], {
+              type: "text/html",
+            }),
+            "text/plain": new Blob([markdown], { type: "text/plain" }),
+          }),
+        ]);
+        setCopyMessage(
+          "Baksidans text och tabell har kopierats med formatering.",
+        );
+      } else {
+        await navigator.clipboard.writeText(markdown);
+        setCopyMessage(
+          "Formaterad kopiering stöds inte här. Markdown har kopierats.",
+        );
+      }
+    } catch (error) {
+      setCopyMessage(`Kunde inte kopiera texten: ${error.message}`);
+    }
+  };
   const dialogRef = useRef(null);
   const closeRef = useRef(null);
   useEffect(() => {
@@ -476,6 +506,11 @@ function Preview({
                 >
                   Kopiera bild som PNG
                 </button>
+                {expandedSide === "back" && (
+                  <button type="button" onClick={copyBackText}>
+                    Kopiera formaterad text
+                  </button>
+                )}
               </div>
               <p className="print-zone-key">
                 Preview-PNG följer valen ovan. Tryckfiler innehåller alltid
@@ -1044,6 +1079,7 @@ function Field({
 const blankLine = {
   ingredientId: "",
   name: "",
+  displayName: "",
   quantity: "",
   unit: "",
   required: true,
@@ -1089,6 +1125,7 @@ function IngredientEditor({ lines, options, update }) {
                           ...item,
                           ingredientId: option?.id || "",
                           name: option?.name || "",
+                          displayName: "",
                           unit: item.unit || option?.defaultUnit || "",
                         }
                       : item,
@@ -1123,6 +1160,11 @@ function IngredientEditor({ lines, options, update }) {
               {ingredientDisplayName(line)}
             </p>
           )}
+          <Field
+            label="Visningsnamn på kort"
+            value={line.displayName || ""}
+            onChange={(v) => change(i, "displayName", v)}
+          />
           <div className="ingredient-fields">
             <Field
               label="Basmängd"
