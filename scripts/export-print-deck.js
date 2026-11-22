@@ -15,6 +15,7 @@ import { cachedImage } from "../server/image-cache.js";
 import { renderSvgPng } from "../server/render-card-png.js";
 import { renderCard, validateCard } from "../shared/cards.js";
 import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
+import { currentRecipes } from "../shared/recipe-status.js";
 import {
   DEFAULT_PRINT_PROFILE,
   resolvePrintProfile,
@@ -28,11 +29,12 @@ const option = (name, fallback) => {
   return at < 0 ? fallback : args[at + 1];
 };
 const out = path.resolve(option("--out", ".local/print/current"));
-const expected = Number(option("--expected", "57"));
+const expectedOption = option("--expected", null);
+const expected = expectedOption === null ? null : Number(expectedOption);
 const privateRoot = path.resolve(".local") + path.sep;
 if (!out.startsWith(privateRoot))
   throw new Error("Tryckfiler måste sparas under .local.");
-if (!Number.isSafeInteger(expected) || expected < 1)
+if (expected !== null && (!Number.isSafeInteger(expected) || expected < 1))
   throw new Error("Ogiltigt --expected.");
 const cardsDir = path.join(out, "cards");
 const sha256 = (bytes) =>
@@ -45,14 +47,14 @@ const sortKey = (recipe) => [
 
 const auth = authClient();
 const catalog = await loadCatalog(auth);
-const recipes = [...catalog.recipes].sort((a, b) => {
+const recipes = currentRecipes(catalog.recipes).sort((a, b) => {
   const x = sortKey(a),
     y = sortKey(b);
   return x[0] - y[0] || x[1] - y[1];
 });
-if (recipes.length !== expected)
+if (expected !== null && recipes.length !== expected)
   throw new Error(`Väntade ${expected} recept, fick ${recipes.length}.`);
-if (new Set(recipes.map((r) => r.id)).size !== expected)
+if (new Set(recipes.map((r) => r.id)).size !== recipes.length)
   throw new Error("Dubbla recept-ID:n.");
 if (recipes.some((r) => !/^[MD]\d{3}$/.test(r.id)))
   throw new Error("Ogiltigt recept-ID.");
@@ -184,6 +186,7 @@ const sourceFingerprint = (items) =>
           id: r.id,
           name: r.name,
           shortName: r.shortName,
+          status: r.status,
           type: r.type,
           servings: r.servings,
           activeTime: r.activeTime,
@@ -200,7 +203,7 @@ const sourceFingerprint = (items) =>
 if (
   sourceFingerprint(recipes) !==
   sourceFingerprint(
-    current.recipes.sort((a, b) => {
+    currentRecipes(current.recipes).sort((a, b) => {
       const x = sortKey(a),
         y = sortKey(b);
       return x[0] - y[0] || x[1] - y[1];

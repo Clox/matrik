@@ -15,6 +15,7 @@ import { previewPng, printLinesUrl } from "./preview-image.js";
 import WeeklyPlan from "./WeeklyPlan.jsx";
 import { normalizeWeekPlan } from "../shared/weekly-plan.js";
 import { filterRecipes, recipeType } from "../shared/recipe-type.js";
+import { currentRecipes, isArchived } from "../shared/recipe-status.js";
 import {
   centeredCrop,
   cropLimits,
@@ -1551,6 +1552,24 @@ function App() {
     load();
   }, []);
   useEffect(() => {
+    if (!catalog) return;
+    const openFromUrl = () => {
+      const id = new URLSearchParams(window.location.search).get("recipe");
+      if (id && catalog.recipes.some((recipe) => recipe.id === id)) {
+        setSelected(id);
+        setShowSettings(false);
+        setShowWeekPlan(false);
+      } else {
+        setSelected(null);
+        setDraft(null);
+        setPreview(null);
+      }
+    };
+    openFromUrl();
+    window.addEventListener("popstate", openFromUrl);
+    return () => window.removeEventListener("popstate", openFromUrl);
+  }, [catalogRequest.generation]);
+  useEffect(() => {
     if (!selected || !catalog) return;
     const recipe = catalog.recipes.find((x) => x.id === selected);
     if (!recipe) return;
@@ -1592,7 +1611,10 @@ function App() {
     const timer = setTimeout(() => setPreview(structuredClone(draft)), 600);
     return () => clearTimeout(timer);
   }, [draft]);
-  const typedRecipes = filterRecipes(catalog?.recipes || [], recipeTypeFilter);
+  const typedRecipes = filterRecipes(
+    currentRecipes(catalog?.recipes || []),
+    recipeTypeFilter,
+  );
   const allTags = [...new Set(typedRecipes.flatMap((r) => r.tags))].sort();
   const recipes = typedRecipes.filter(
     (r) =>
@@ -1613,6 +1635,9 @@ function App() {
     setMessage("");
     setImageFeedback("");
     setSelected(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("recipe", id);
+    window.history.pushState({}, "", url);
     setShowSettings(false);
     setShowWeekPlan(false);
   };
@@ -2058,6 +2083,16 @@ function App() {
             {message && (
               <div className="notice" role="status">
                 {message}
+              </div>
+            )}
+            {isArchived(draft) && (
+              <div className="notice archived-notice" role="status">
+                <strong>Arkiverat recept.</strong> Det här receptet finns kvar
+                för äldre länkar och QR-koder. Aktuellt recept är{" "}
+                <button type="button" onClick={() => selectRecipe("M038")}>
+                  M038 · Varma mackor
+                </button>
+                .
               </div>
             )}
             <div className="workspace">

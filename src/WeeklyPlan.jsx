@@ -13,6 +13,7 @@ import {
 import { grammaticalUnit } from "../shared/ingredient-label.js";
 import { displayIngredientEntries } from "../shared/ingredient-order.js";
 import { recipeType } from "../shared/recipe-type.js";
+import { currentRecipes, isArchived } from "../shared/recipe-status.js";
 import {
   WEEK_DAYS,
   UNSCHEDULED,
@@ -32,12 +33,17 @@ function selected(entry, recipe, line, index) {
 }
 
 export default function WeeklyPlan({ recipes, plan, setPlan }) {
-  const [recipeId, setRecipeId] = useState(recipes[0]?.id || "");
+  const availableRecipes = useMemo(() => currentRecipes(recipes), [recipes]);
+  const [recipeId, setRecipeId] = useState(availableRecipes[0]?.id || "");
   const [day, setDay] = useState(UNSCHEDULED);
   const byId = useMemo(
     () => new Map(recipes.map((recipe) => [recipe.id, recipe])),
     [recipes],
   );
+  useEffect(() => {
+    if (!availableRecipes.some((recipe) => recipe.id === recipeId))
+      setRecipeId(availableRecipes[0]?.id || "");
+  }, [availableRecipes, recipeId]);
   const list = useMemo(() => shoppingList(recipes, plan), [recipes, plan]);
   const [checkedItems, setCheckedItems] = useState(() => {
     try {
@@ -99,7 +105,7 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                 value={recipeId}
                 onChange={(event) => setRecipeId(event.target.value)}
               >
-                {recipes.map((recipe) => (
+                {availableRecipes.map((recipe) => (
                   <option key={recipe.id} value={recipe.id}>
                     {recipe.name} · {recipe.id}
                   </option>
@@ -151,6 +157,9 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                     <span>
                       {recipe.id} · {recipeType(recipe)} · {dayLabel(entry.day)}
                     </span>
+                    {isArchived(recipe) && (
+                      <span>Arkiverat recept i sparad veckoplan</span>
+                    )}
                   </div>
                   <button
                     className="secondary"
@@ -193,7 +202,12 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                         )
                       }
                     >
-                      {recipes.map((item) => (
+                      {isArchived(recipe) && (
+                        <option value={recipe.id}>
+                          {recipe.name} · {recipe.id} (arkiverad)
+                        </option>
+                      )}
+                      {availableRecipes.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name} · {item.id}
                         </option>

@@ -1195,6 +1195,16 @@ h3 {
   margin: 12px 0 20px;
   font-size: 13px;
 }
+.archived-notice button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .empty {
   max-width: 430px;
   margin: 18vh auto;

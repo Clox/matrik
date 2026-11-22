@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { filterRecipes, recipeType } from "../shared/recipe-type.js";
+import { currentRecipes, isArchived } from "../shared/recipe-status.js";
 import {
   applyIngredientChoice,
   shoppingList,
@@ -51,6 +52,22 @@ test("M utan typ och D utan typ filtreras rätt utan att ändra 47 maträtter", 
   assert.equal(filterRecipes(all, "Maträtt").length, 47);
   assert.deepEqual(filterRecipes(all, "Dessert"), [dessert]);
   assert.equal(filterRecipes(all, "Alla").length, 48);
+});
+
+test("arkiverat recept döljs från nya val och tryckurval men finns kvar i historisk plan", () => {
+  const archived = { ...food, id: "M039", status: "Arkiverad" };
+  const available = currentRecipes([food, archived, dessert]);
+  assert.deepEqual(
+    available.map((recipe) => recipe.id),
+    ["M001", "D001"],
+  );
+  assert.equal(isArchived(archived), true);
+  assert.equal(isArchived(food), false);
+  const plan = normalizeWeekPlan([
+    { id: "old", recipeId: "M039", servings: 4, choices: {} },
+  ]);
+  assert.equal(plan[0].recipeId, "M039");
+  assert.equal(shoppingList([food, archived, dessert], plan).length > 0, true);
 });
 
 test("upprepade maträtter och desserter samma dag summeras per förekomst", () => {
