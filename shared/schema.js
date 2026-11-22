@@ -64,6 +64,7 @@ export const FIELDS = {
     quantityMode: ["mängdläge"],
     purchaseMode: ["inköpsläge"],
     displayOrder: ["visningsordning"],
+    canExclude: ["kan väljas bort"],
   },
   tags: {
     dishId: ["rätt-id", "rättid", "mat-id"],
@@ -263,6 +264,7 @@ export function makeCatalog(data) {
             purchaseMode: link.purchaseMode || "Beräkna",
             unit: link.unit || ingredient?.defaultUnit || "",
             required: parseBool(link.required),
+            canExclude: parseBool(link.canExclude),
             note: link.note,
             scaling: link.scaling || "Proportionell",
             rounding: link.rounding,

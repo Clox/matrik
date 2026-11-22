@@ -1088,6 +1088,7 @@ const blankLine = {
   cardVisibility: "Visa",
   quantityMode: "Exakt",
   purchaseMode: "Beräkna",
+  canExclude: false,
   displayOrder: "",
   unit: "",
   required: true,
@@ -1104,6 +1105,7 @@ function IngredientEditor({
   update,
   modesAvailable,
   orderAvailable,
+  canExcludeAvailable,
 }) {
   const change = (index, key, value) =>
     update(
@@ -1273,6 +1275,16 @@ function IngredientEditor({
               />{" "}
               Obligatorisk
             </label>
+            {canExcludeAvailable && line.required && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(line.canExclude)}
+                  onChange={(e) => change(i, "canExclude", e.target.checked)}
+                />{" "}
+                Förvald men kan väljas bort
+              </label>
+            )}
           </div>
         </div>
       ))}
@@ -2131,6 +2143,7 @@ function App() {
                     "purchaseMode",
                   ].every((key) => catalog.schema.links[key] >= 0)}
                   orderAvailable={catalog.schema.links.displayOrder >= 0}
+                  canExcludeAvailable={catalog.schema.links.canExclude >= 0}
                 />
                 <PreparationEditor
                   preparations={draft.preparations}

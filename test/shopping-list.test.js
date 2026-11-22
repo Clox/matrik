@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyIngredientChoice,
+  canToggleIngredient,
   ingredientChoices,
   lineKey,
   shoppingList,
@@ -12,6 +13,34 @@ const recipe = (id, ingredients) => ({
   name: `Rätt ${id}`,
   servings: 4,
   ingredients,
+});
+
+test("förvalt bacon kan väljas bort utan att öppna andra obligatoriska rader", () => {
+  const r = recipe("M048", [
+    line("111", "Bacon", 300, "g", { canExclude: true }),
+    line("40", "Ägg", 4, "st", { scaling: "Hela enheter" }),
+  ]);
+  assert.equal(canToggleIngredient(r, r.ingredients[0]), true);
+  assert.equal(canToggleIngredient(r, r.ingredients[1]), false);
+  const plan = applyIngredientChoice(entry("M048"), r, 0, { included: false });
+  for (const servings of [4, 6, 8]) {
+    const result = shoppingList([r], [{ ...plan, servings }]);
+    assert.equal(
+      result.some((item) => item.ingredientId === "111"),
+      false,
+    );
+    assert.equal(
+      result.find((item) => item.ingredientId === "40").amount,
+      servings,
+    );
+  }
+  // Ett äldre eller manipulerat sparat val kan inte ta bort ett låst ägg.
+  const tampered = entry("M048", 4, { 40: { included: false } });
+  assert.equal(
+    shoppingList([r], [tampered]).find((item) => item.ingredientId === "40")
+      .amount,
+    4,
+  );
 });
 const line = (ingredientId, name, quantity, unit, extra = {}) => ({
   ingredientId,

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   applyIngredientChoice,
+  canToggleIngredient,
   effectivePurchaseMode,
   formatAmount,
   ingredientOptions,
   lineKey,
-  replacementFor,
   scaledAmount,
   selectedIngredient,
   shoppingList,
@@ -23,9 +23,12 @@ import {
   updatePlanEntry,
 } from "../shared/weekly-plan.js";
 
-function selected(entry, line, index) {
+function selected(entry, recipe, line, index) {
   const choice = entry.choices?.[lineKey(line, index)];
-  return choice?.included ?? line.required;
+  return (
+    (canToggleIngredient(recipe, line) ? choice?.included : undefined) ??
+    line.required
+  );
 }
 
 export default function WeeklyPlan({ recipes, plan, setPlan }) {
@@ -227,15 +230,9 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                         const key = lineKey(line, index),
                           options = ingredientOptions(line),
                           choice = entry.choices?.[key],
-                          included = selected(entry, line, index),
+                          included = selected(entry, recipe, line, index),
                           chosen = selectedIngredient(line, choice);
-                        const canToggle =
-                          !line.required ||
-                          recipe.ingredients.some(
-                            (other) =>
-                              replacementFor(recipe, other) ===
-                              line.ingredientId,
-                          );
+                        const canToggle = canToggleIngredient(recipe, line);
                         return (
                           <div className="weekly-ingredient" key={key}>
                             <label className="weekly-ingredient-main">
@@ -277,7 +274,11 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                                       )}
                                     </>
                                   )}
-                                  {!line.required ? " · valfri" : ""}
+                                  {!line.required
+                                    ? " · valfri"
+                                    : line.canExclude
+                                      ? " · kan väljas bort"
+                                      : ""}
                                 </small>
                               </span>
                             </label>

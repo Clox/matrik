@@ -94,6 +94,16 @@ export function replacementFor(recipe, line) {
   return found?.ingredientId || null;
 }
 
+export function canToggleIngredient(recipe, line) {
+  return (
+    !line.required ||
+    Boolean(line.canExclude) ||
+    recipe.ingredients.some(
+      (other) => replacementFor(recipe, other) === line.ingredientId,
+    )
+  );
+}
+
 // A selected optional ingredient can require a separate pantry item. Keep the
 // association by stable ingredient IDs so unrelated recipes and similar names
 // cannot acquire the companion accidentally.
@@ -109,6 +119,8 @@ function companionSource(recipe, line) {
 
 export function applyIngredientChoice(entry, recipe, index, patch) {
   const line = recipe.ingredients[index];
+  if (patch.included === false && !canToggleIngredient(recipe, line))
+    return entry;
   const key = lineKey(line, index);
   const choices = {
     ...entry.choices,
@@ -231,7 +243,7 @@ export function shoppingList(recipes, plan) {
       const choice = entry.choices?.[lineKey(line, index)] || {};
       const sourceId = companionSource(recipe, line);
       const included =
-        choice.included ??
+        (canToggleIngredient(recipe, line) ? choice.included : undefined) ??
         (sourceId ? entry.choices?.[sourceId]?.included : undefined) ??
         line.required;
       if (!included) continue;

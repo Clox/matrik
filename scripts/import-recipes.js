@@ -38,6 +38,56 @@ const auth = authClient();
 const catalog = await loadCatalog(auth);
 const plan = buildImportPlan(catalog, source);
 
+// Additional reviewed edits use exact old-cell preconditions. This permits a
+// single import to include existing-recipe corrections and alternative rows.
+function appendReviewedChanges(current, target) {
+  const known = new Map(target.changes.map((change) => [change.range, change]));
+  for (const item of source.extraChanges || []) {
+    const sheet = current.raw[item.kind];
+    if (
+      !sheet ||
+      !Number.isInteger(item.row) ||
+      !Number.isInteger(item.column)
+    ) {
+      target.conflicts.push(
+        `Ogiltig kompletterande celländring: ${item.range}`,
+      );
+      continue;
+    }
+    const before =
+      item.row === 1
+        ? String(sheet.headers[item.column] ?? "")
+        : String(sheet.rows[item.row - 2]?.cells?.[item.column] ?? "");
+    const expected = String(item.before ?? "");
+    const after = String(item.after ?? "");
+    if (before === after) continue;
+    if (before !== expected) {
+      target.conflicts.push(
+        `${item.range}: förväntat gammalt cellvärde stämmer inte.`,
+      );
+      continue;
+    }
+    if (known.has(item.range)) {
+      if (known.get(item.range).after !== after)
+        target.conflicts.push(`${item.range}: olika ändringar i samma cell.`);
+      continue;
+    }
+    const change = {
+      kind: item.kind,
+      range: item.range,
+      row: item.row,
+      column: item.column,
+      before,
+      after,
+      writeValue: item.writeValue ?? after,
+      context: item.context || "Granskad komplettering",
+    };
+    target.changes.push(change);
+    known.set(item.range, change);
+  }
+}
+appendReviewedChanges(catalog, plan);
+
 const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
 const sheets = google.sheets({ version: "v4", auth });
 const drive = google.drive({ version: "v3", auth });
@@ -74,7 +124,7 @@ const byTitle = Object.fromEntries(
 );
 const properties = await sheets.spreadsheets.get({
   spreadsheetId,
-  fields: "sheets(properties(title,gridProperties))",
+  fields: "sheets(properties(sheetId,title,gridProperties))",
 });
 const sizes = Object.fromEntries(
   (properties.data.sheets || []).map((sheet) => [
@@ -147,6 +197,7 @@ for (const [kind, sheet] of Object.entries(catalog.raw)) {
     links: "Rätt-ingredienser",
     tags: "Taggar",
     preparations: "Rätt-förberedelser",
+    alternatives: "Rätt-ingrediensalternativ",
   }[kind];
   const maxRow = Math.max(
     0,
@@ -161,10 +212,20 @@ for (const [kind, sheet] of Object.entries(catalog.raw)) {
       .map((change) => change.column + 1),
   );
   const gridSize = sizes[title];
+  const schemaExpansion =
+    title === "Rätt-ingredienser" &&
+    maxColumn === 20 &&
+    gridSize?.columnCount === 19 &&
+    plan.changes.some(
+      (change) =>
+        change.range === "'Rätt-ingredienser'!T1" &&
+        change.before === "" &&
+        change.after === "Kan väljas bort",
+    );
   if (
     !gridSize ||
     maxRow > gridSize.rowCount ||
-    maxColumn > gridSize.columnCount
+    (maxColumn > gridSize.columnCount && !schemaExpansion)
   )
     throw new Error(
       `${title} behöver större rutnät; importen stoppas utan ändringar.`,
@@ -229,6 +290,29 @@ fs.writeFileSync(
 );
 fs.chmodSync(backupPath, 0o600);
 console.log(`Säkerhetskopia skapad i Drive och lokalt: ${backupPath}`);
+const linkGrid = sizes["Rätt-ingredienser"];
+if (
+  plan.changes.some((change) => change.range === "'Rätt-ingredienser'!T1") &&
+  linkGrid.columnCount === 19
+) {
+  const sheetId = properties.data.sheets.find(
+    (sheet) => sheet.properties.title === "Rätt-ingredienser",
+  )?.properties.sheetId;
+  if (sheetId === undefined) throw new Error("Relationsflikens ark-ID saknas.");
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { columnCount: 20 } },
+            fields: "gridProperties.columnCount",
+          },
+        },
+      ],
+    },
+  });
+}
 await sheets.spreadsheets.values.batchUpdate({
   spreadsheetId,
   requestBody: {
@@ -253,7 +337,9 @@ if (formulas.length)
       })),
     },
   });
-const after = buildImportPlan(await loadCatalog(auth), source);
+const afterCatalog = await loadCatalog(auth);
+const after = buildImportPlan(afterCatalog, source);
+appendReviewedChanges(afterCatalog, after);
 if (after.conflicts.length || after.changes.length)
   throw new Error(
     `Importen behöver kontroll: ${after.changes.length} ändringar och ${after.conflicts.length} konflikter återstår. Säkerhetskopia: ${backupPath}`,

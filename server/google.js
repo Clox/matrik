@@ -546,6 +546,7 @@ export async function saveRecipe(auth, id, input) {
               line.displayName ??
               (old?.ingredientId === line.ingredientId ? old.displayName : ""),
             displayOrder: line.displayOrder ?? old?.displayOrder ?? "",
+            canExclude: line.required && line.canExclude ? "Ja" : "",
             cardVisibility:
               old?.cardVisibility === line.cardVisibility
                 ? old.cardVisibility

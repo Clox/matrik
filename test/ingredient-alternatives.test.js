@@ -107,6 +107,17 @@ test("Sheets-alternativ kopplas till exakt receptrelation och skalar egen mängd
   assert.doesNotMatch(renderCard(recipe, "back"), /Färdiglagad kyckling/);
 });
 
+test("valfritt relationsfält gör standardingrediens bortvalbar utan att ändra äldre rader", () => {
+  const withField = structuredClone(data);
+  withField.links[0].push("Kan väljas bort");
+  withField.links[1].push("Ja");
+  assert.equal(
+    makeCatalog(withField).recipes[0].ingredients[0].canExclude,
+    true,
+  );
+  assert.equal(makeCatalog(data).recipes[0].ingredients[0].canExclude, false);
+});
+
 test("ofullständiga eller lösa alternativ stoppas vid inläsning", () => {
   const missing = structuredClone(data);
   missing.alternatives[1][1] = "999";
