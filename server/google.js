@@ -17,6 +17,7 @@ import {
 } from "../shared/image-variants.js";
 import { normalizeCrop } from "../shared/image-crop.js";
 import { DEFAULT_PRINT_PROFILE } from "../shared/print-profile.js";
+import { validateDisplayOrder } from "../shared/ingredient-order.js";
 
 const localDir = path.resolve(".local");
 const tokenPath = path.join(localDir, "token.json");
@@ -293,6 +294,7 @@ export function withRevisions(catalog) {
   };
 }
 export async function saveRecipe(auth, id, input) {
+  validateDisplayOrder(input.ingredients || []);
   const catalog = withRevisions(await loadCatalog(auth));
   const current = catalog.recipes.find((r) => r.id === id);
   if (!current)
@@ -543,6 +545,7 @@ export async function saveRecipe(auth, id, input) {
             displayName:
               line.displayName ??
               (old?.ingredientId === line.ingredientId ? old.displayName : ""),
+            displayOrder: line.displayOrder ?? old?.displayOrder ?? "",
             cardVisibility:
               old?.cardVisibility === line.cardVisibility
                 ? old.cardVisibility

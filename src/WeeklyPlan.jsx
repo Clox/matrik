@@ -11,6 +11,7 @@ import {
   shoppingList,
 } from "../shared/shopping-list.js";
 import { grammaticalUnit } from "../shared/ingredient-label.js";
+import { displayIngredientEntries } from "../shared/ingredient-order.js";
 import { recipeType } from "../shared/recipe-type.js";
 import {
   WEEK_DAYS,
@@ -221,99 +222,102 @@ export default function WeeklyPlan({ recipes, plan, setPlan }) {
                     <span>{recipe.ingredients.length} rader</span>
                   </summary>
                   <div className="weekly-ingredient-list">
-                    {recipe.ingredients.map((line, index) => {
-                      const key = lineKey(line, index),
-                        options = ingredientOptions(line),
-                        choice = entry.choices?.[key],
-                        included = selected(entry, line, index),
-                        chosen = selectedIngredient(line, choice);
-                      const canToggle =
-                        !line.required ||
-                        recipe.ingredients.some(
-                          (other) =>
-                            replacementFor(recipe, other) === line.ingredientId,
-                        );
-                      return (
-                        <div className="weekly-ingredient" key={key}>
-                          <label className="weekly-ingredient-main">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(included)}
-                              disabled={!canToggle}
-                              onChange={(event) =>
-                                updateChoice(entry, recipe, index, {
-                                  included: event.target.checked,
-                                })
-                              }
-                            />
-                            <span>
-                              <strong>{chosen.name}</strong>
-                              <small>
-                                {effectivePurchaseMode(line) ===
-                                "Kontrollera hemma" ? (
-                                  "Kontrollera hemma · mängd efter behov"
-                                ) : effectivePurchaseMode(line) ===
-                                  "Utelämna" ? (
-                                  "Ej på inköpslistan"
-                                ) : (
-                                  <>
-                                    {formatAmount(
-                                      scaledAmount(
-                                        chosen,
-                                        Number(entry.servings),
-                                        recipe.servings,
-                                      ),
-                                    )}{" "}
-                                    {grammaticalUnit(
-                                      chosen.unit,
-                                      scaledAmount(
-                                        chosen,
-                                        Number(entry.servings),
-                                        recipe.servings,
-                                      ),
-                                    )}
-                                  </>
-                                )}
-                                {!line.required ? " · valfri" : ""}
-                              </small>
-                            </span>
-                          </label>
-                          {options.length > 1 && (
-                            <label className="weekly-option">
-                              <span>Välj vara</span>
-                              <select
-                                value={chosen.ingredientId}
-                                disabled={!included}
+                    {displayIngredientEntries(recipe.ingredients).map(
+                      ({ line, index }) => {
+                        const key = lineKey(line, index),
+                          options = ingredientOptions(line),
+                          choice = entry.choices?.[key],
+                          included = selected(entry, line, index),
+                          chosen = selectedIngredient(line, choice);
+                        const canToggle =
+                          !line.required ||
+                          recipe.ingredients.some(
+                            (other) =>
+                              replacementFor(recipe, other) ===
+                              line.ingredientId,
+                          );
+                        return (
+                          <div className="weekly-ingredient" key={key}>
+                            <label className="weekly-ingredient-main">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(included)}
+                                disabled={!canToggle}
                                 onChange={(event) =>
                                   updateChoice(entry, recipe, index, {
-                                    ingredientId: event.target.value,
+                                    included: event.target.checked,
                                   })
                                 }
-                              >
-                                {options.map((option) => (
-                                  <option
-                                    key={option.ingredientId}
-                                    value={option.ingredientId}
-                                  >
-                                    {option.name}
-                                  </option>
-                                ))}
-                              </select>
+                              />
+                              <span>
+                                <strong>{chosen.name}</strong>
+                                <small>
+                                  {effectivePurchaseMode(line) ===
+                                  "Kontrollera hemma" ? (
+                                    "Kontrollera hemma · mängd efter behov"
+                                  ) : effectivePurchaseMode(line) ===
+                                    "Utelämna" ? (
+                                    "Ej på inköpslistan"
+                                  ) : (
+                                    <>
+                                      {formatAmount(
+                                        scaledAmount(
+                                          chosen,
+                                          Number(entry.servings),
+                                          recipe.servings,
+                                        ),
+                                      )}{" "}
+                                      {grammaticalUnit(
+                                        chosen.unit,
+                                        scaledAmount(
+                                          chosen,
+                                          Number(entry.servings),
+                                          recipe.servings,
+                                        ),
+                                      )}
+                                    </>
+                                  )}
+                                  {!line.required ? " · valfri" : ""}
+                                </small>
+                              </span>
                             </label>
-                          )}
-                          {chosen.preparation && (
-                            <small className="weekly-hint">
-                              {chosen.preparation}
-                            </small>
-                          )}
-                          {line.purchaseNote && (
-                            <small className="weekly-hint">
-                              {line.purchaseNote}
-                            </small>
-                          )}
-                        </div>
-                      );
-                    })}
+                            {options.length > 1 && (
+                              <label className="weekly-option">
+                                <span>Välj vara</span>
+                                <select
+                                  value={chosen.ingredientId}
+                                  disabled={!included}
+                                  onChange={(event) =>
+                                    updateChoice(entry, recipe, index, {
+                                      ingredientId: event.target.value,
+                                    })
+                                  }
+                                >
+                                  {options.map((option) => (
+                                    <option
+                                      key={option.ingredientId}
+                                      value={option.ingredientId}
+                                    >
+                                      {option.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            )}
+                            {chosen.preparation && (
+                              <small className="weekly-hint">
+                                {chosen.preparation}
+                              </small>
+                            )}
+                            {line.purchaseNote && (
+                              <small className="weekly-hint">
+                                {line.purchaseNote}
+                              </small>
+                            )}
+                          </div>
+                        );
+                      },
+                    )}
                   </div>
                 </details>
               </article>

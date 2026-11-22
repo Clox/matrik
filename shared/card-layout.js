@@ -1,5 +1,6 @@
 import { CARD_FONT_METRICS } from "./card-font-metrics.js";
 import { cardIngredientName, cardUnit } from "./ingredient-label.js";
+import { standardCardIngredients } from "./ingredient-order.js";
 
 const glyph = (char, bold) =>
   CARD_FONT_METRICS[bold ? "bold" : "regular"][char] ||
@@ -132,45 +133,44 @@ export function backCardLayout(recipe, profile, quantityFor) {
     add("Portionsrubrik", text, 16, columns[index], headingY, false, "end"),
   );
   let y = tableY;
-  const rows = (recipe.ingredients || [])
-    .filter((item) => item.cardVisibility !== "Dölj")
-    .map((item, index) => {
-      const label = cardIngredientName(item);
-      const nameSize = label === item.name ? 18 : 15;
-      const names = wrapCardText(label, nameSize, 259);
-      const height = names.length === 2 ? 43 : 29;
-      const nameBounds = names.map((text, line) =>
-        add(
-          `Ingrediens ${index + 1}`,
-          text,
-          nameSize,
-          left,
-          y + 20 + line * 17,
-        ),
-      );
-      const quantities = [4, 6, 8].map((portions) =>
-        quantityFor(item, portions, recipe.servings),
-      );
-      const unit = cardUnit(item, quantities);
-      const unitBounds = add(`Enhet ${index + 1}`, unit, 17, unitX, y + 20);
-      const quantityBounds = quantities.map((text, col) =>
-        add(`Mängd ${index + 1}`, text, 18, columns[col], y + 20, true, "end"),
-      );
-      const row = {
-        y,
-        height,
-        label,
-        names,
-        nameSize,
-        unit,
-        quantities,
-        nameBounds,
-        unitBounds,
-        quantityBounds,
-      };
-      y += height;
-      return row;
-    });
+  const rows = standardCardIngredients(recipe).map((item, index) => {
+    const label = cardIngredientName(item);
+    let nameSize = 18;
+    let names = wrapCardText(label, nameSize, 259);
+    if (
+      names.length > 2 ||
+      names.some((text) => cardTextWidth(text, nameSize) > 259)
+    ) {
+      nameSize = 15;
+      names = wrapCardText(label, nameSize, 259);
+    }
+    const height = names.length === 2 ? 43 : 29;
+    const nameBounds = names.map((text, line) =>
+      add(`Ingrediens ${index + 1}`, text, nameSize, left, y + 20 + line * 17),
+    );
+    const quantities = [4, 6, 8].map((portions) =>
+      quantityFor(item, portions, recipe.servings),
+    );
+    const unit = cardUnit(item, quantities);
+    const unitBounds = add(`Enhet ${index + 1}`, unit, 17, unitX, y + 20);
+    const quantityBounds = quantities.map((text, col) =>
+      add(`Mängd ${index + 1}`, text, 18, columns[col], y + 20, true, "end"),
+    );
+    const row = {
+      y,
+      height,
+      label,
+      names,
+      nameSize,
+      unit,
+      quantities,
+      nameBounds,
+      unitBounds,
+      quantityBounds,
+    };
+    y += height;
+    return row;
+  });
   const dividerY = y + 9;
   const instructionLines = wrapCardText(
     recipe.cardRecipe || recipe.recipe,

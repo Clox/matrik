@@ -4,6 +4,7 @@ import { cardUnit, cardIngredientName } from "./ingredient-label.js";
 import { recipeType } from "./recipe-type.js";
 import { cropImageSvg } from "./image-crop.js";
 import { backCardLayout } from "./card-layout.js";
+import { standardCardIngredients } from "./ingredient-order.js";
 
 export const CARD = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 export const FRONT_STYLES = [
@@ -154,9 +155,7 @@ export function validateCard(recipe, profile = DEFAULT_PRINT_PROFILE) {
       level: "error",
       message: "Titeln behöver ett kortnamn som ryms på högst två rader.",
     });
-  const visibleIngredients = (recipe.ingredients || []).filter(
-    (line) => line.cardVisibility !== "Dölj",
-  );
+  const visibleIngredients = standardCardIngredients(recipe);
   if (visibleIngredients.length > 15)
     issues.push({
       level: "error",

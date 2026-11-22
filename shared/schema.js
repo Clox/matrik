@@ -63,6 +63,7 @@ export const FIELDS = {
     cardVisibility: ["kortvisning"],
     quantityMode: ["mängdläge"],
     purchaseMode: ["inköpsläge"],
+    displayOrder: ["visningsordning"],
   },
   tags: {
     dishId: ["rätt-id", "rättid", "mat-id"],
@@ -251,6 +252,7 @@ export function makeCatalog(data) {
             ingredientId: link.ingredientId,
             name: ingredient?.name || `Ingrediens ${link.ingredientId}`,
             displayName: link.displayName || "",
+            displayOrder: link.displayOrder || "",
             quantity:
               link.quantity.trim() === "" &&
               ["Ungefärlig", "Ingen"].includes(link.quantityMode)

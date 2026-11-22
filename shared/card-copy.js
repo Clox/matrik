@@ -1,5 +1,6 @@
 import { cardTheme, scaledQuantity } from "./cards.js";
 import { cardIngredientName, cardUnit } from "./ingredient-label.js";
+import { standardCardIngredients } from "./ingredient-order.js";
 
 function cardContent(recipe) {
   return {
@@ -10,18 +11,16 @@ function cardContent(recipe) {
     ]
       .filter(Boolean)
       .join(" · "),
-    rows: (recipe.ingredients || [])
-      .filter((line) => line.cardVisibility !== "Dölj")
-      .map((line) => {
-        const quantities = [4, 6, 8].map((portions) =>
-          scaledQuantity(line, portions, recipe.servings),
-        );
-        return [
-          cardIngredientName(line),
-          cardUnit(line, quantities),
-          ...quantities,
-        ];
-      }),
+    rows: standardCardIngredients(recipe).map((line) => {
+      const quantities = [4, 6, 8].map((portions) =>
+        scaledQuantity(line, portions, recipe.servings),
+      );
+      return [
+        cardIngredientName(line),
+        cardUnit(line, quantities),
+        ...quantities,
+      ];
+    }),
     instructions: String(recipe.cardRecipe || recipe.recipe || "").trim(),
   };
 }

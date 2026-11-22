@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
 import { backCardHtml, backCardMarkdown } from "../shared/card-copy.js";
 import { ingredientDisplayName } from "../shared/ingredient-label.js";
+import { displayIngredientEntries } from "../shared/ingredient-order.js";
 import {
   DEFAULT_PRINT_PROFILE,
   PRINT_PROFILES,
@@ -1087,6 +1088,7 @@ const blankLine = {
   cardVisibility: "Visa",
   quantityMode: "Exakt",
   purchaseMode: "Beräkna",
+  displayOrder: "",
   unit: "",
   required: true,
   note: "",
@@ -1096,7 +1098,13 @@ const blankLine = {
   packageSize: "",
   purchaseNote: "",
 };
-function IngredientEditor({ lines, options, update, modesAvailable }) {
+function IngredientEditor({
+  lines,
+  options,
+  update,
+  modesAvailable,
+  orderAvailable,
+}) {
   const change = (index, key, value) =>
     update(
       lines.map((line, i) => (i === index ? { ...line, [key]: value } : line)),
@@ -1115,10 +1123,12 @@ function IngredientEditor({ lines, options, update, modesAvailable }) {
           + Lägg till
         </button>
       </div>
-      {lines.map((line, i) => (
+      {displayIngredientEntries(lines).map(({ line, index: i }, position) => (
         <div className="ingredient" key={`${line.ingredientId}-${i}`}>
           <div className="ingredient-top">
-            <span className="number">{String(i + 1).padStart(2, "0")}</span>
+            <span className="number">
+              {String(position + 1).padStart(2, "0")}
+            </span>
             <select
               aria-label="Välj ingrediens"
               value={line.ingredientId || ""}
@@ -1171,6 +1181,13 @@ function IngredientEditor({ lines, options, update, modesAvailable }) {
             value={line.displayName || ""}
             onChange={(v) => change(i, "displayName", v)}
           />
+          {orderAvailable && (
+            <Field
+              label="Visningsordning"
+              value={line.displayOrder || ""}
+              onChange={(v) => change(i, "displayOrder", v)}
+            />
+          )}
           {modesAvailable && (
             <div className="ingredient-fields">
               {[
@@ -2113,6 +2130,7 @@ function App() {
                     "quantityMode",
                     "purchaseMode",
                   ].every((key) => catalog.schema.links[key] >= 0)}
+                  orderAvailable={catalog.schema.links.displayOrder >= 0}
                 />
                 <PreparationEditor
                   preparations={draft.preparations}
