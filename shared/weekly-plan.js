@@ -39,6 +39,17 @@ export function normalizeWeekPlan(saved, createId = () => crypto.randomUUID()) {
     });
 }
 
+// One-time migration when the historical M039 was removed and Kåldolmar M051
+// took its ID. Old M039 selections must never silently become Kåldolmar.
+export function migrateM039Reassignment(saved) {
+  if (!Array.isArray(saved)) return [];
+  return saved
+    .filter((entry) => entry?.recipeId !== "M039")
+    .map((entry) =>
+      entry?.recipeId === "M051" ? { ...entry, recipeId: "M039" } : entry,
+    );
+}
+
 export function addPlanEntry(
   plan,
   recipe,

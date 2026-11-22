@@ -9,6 +9,7 @@ import {
 import {
   addPlanEntry,
   normalizeWeekPlan,
+  migrateM039Reassignment,
   removePlanEntry,
   replacePlanEntry,
   updatePlanEntry,
@@ -55,7 +56,7 @@ test("M utan typ och D utan typ filtreras rätt utan att ändra 47 maträtter", 
 });
 
 test("arkiverat recept döljs från nya val och tryckurval men finns kvar i historisk plan", () => {
-  const archived = { ...food, id: "M039", status: "Arkiverad" };
+  const archived = { ...food, id: "M099", status: "Arkiverad" };
   const available = currentRecipes([food, archived, dessert]);
   assert.deepEqual(
     available.map((recipe) => recipe.id),
@@ -64,10 +65,22 @@ test("arkiverat recept döljs från nya val och tryckurval men finns kvar i hist
   assert.equal(isArchived(archived), true);
   assert.equal(isArchived(food), false);
   const plan = normalizeWeekPlan([
-    { id: "old", recipeId: "M039", servings: 4, choices: {} },
+    { id: "old", recipeId: "M099", servings: 4, choices: {} },
   ]);
-  assert.equal(plan[0].recipeId, "M039");
+  assert.equal(plan[0].recipeId, "M099");
   assert.equal(shoppingList([food, archived, dessert], plan).length > 0, true);
+});
+
+test("historisk M039-plan tas bort och Kåldolmar M051 flyttas till M039", () => {
+  const saved = [
+    { id: "old", recipeId: "M039", servings: 4 },
+    { id: "cabbage", recipeId: "M051", servings: 6, choices: { 1: "x" } },
+    { id: "other", recipeId: "M001", servings: 8 },
+  ];
+  assert.deepEqual(migrateM039Reassignment(saved), [
+    { id: "cabbage", recipeId: "M039", servings: 6, choices: { 1: "x" } },
+    saved[2],
+  ]);
 });
 
 test("upprepade maträtter och desserter samma dag summeras per förekomst", () => {

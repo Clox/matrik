@@ -13,7 +13,10 @@ import {
 } from "../shared/print-profile.js";
 import { previewPng, printLinesUrl } from "./preview-image.js";
 import WeeklyPlan from "./WeeklyPlan.jsx";
-import { normalizeWeekPlan } from "../shared/weekly-plan.js";
+import {
+  migrateM039Reassignment,
+  normalizeWeekPlan,
+} from "../shared/weekly-plan.js";
 import { filterRecipes, recipeType } from "../shared/recipe-type.js";
 import { currentRecipes, isArchived } from "../shared/recipe-status.js";
 import {
@@ -1452,6 +1455,16 @@ function App() {
         const saved = JSON.parse(
           localStorage.getItem("matrik.weekPlan") || "[]",
         );
+        if (localStorage.getItem("matrik.weekPlan.m039Reassigned") !== "1") {
+          localStorage.setItem(
+            "matrik.weekPlan.beforeM039Reassignment",
+            JSON.stringify(saved),
+          );
+          const migrated = migrateM039Reassignment(saved);
+          localStorage.setItem("matrik.weekPlan", JSON.stringify(migrated));
+          localStorage.setItem("matrik.weekPlan.m039Reassigned", "1");
+          return normalizeWeekPlan(migrated);
+        }
         return normalizeWeekPlan(saved);
       } catch {
         return [];
@@ -1555,8 +1568,17 @@ function App() {
     if (!catalog) return;
     const openFromUrl = () => {
       const id = new URLSearchParams(window.location.search).get("recipe");
-      if (id && catalog.recipes.some((recipe) => recipe.id === id)) {
-        setSelected(id);
+      const currentId = id === "M051" ? "M039" : id;
+      if (id === "M051") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("recipe", "M039");
+        window.history.replaceState({}, "", url);
+      }
+      if (
+        currentId &&
+        catalog.recipes.some((recipe) => recipe.id === currentId)
+      ) {
+        setSelected(currentId);
         setShowSettings(false);
         setShowWeekPlan(false);
       } else {
@@ -2087,12 +2109,8 @@ function App() {
             )}
             {isArchived(draft) && (
               <div className="notice archived-notice" role="status">
-                <strong>Arkiverat recept.</strong> Det här receptet finns kvar
-                för äldre länkar och QR-koder. Aktuellt recept är{" "}
-                <button type="button" onClick={() => selectRecipe("M038")}>
-                  M038 · Varma mackor
-                </button>
-                .
+                <strong>Arkiverat recept.</strong> Receptet visas inte i den
+                vanliga bläddringen eller i nya veckoplaner.
               </div>
             )}
             <div className="workspace">
