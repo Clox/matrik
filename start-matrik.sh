@@ -11,6 +11,31 @@ open_page() {
   fi
 }
 
+node_major() {
+  local version
+  version="$(node --version 2>/dev/null)" || return 1
+  [[ "$version" =~ ^v([0-9]+)\. ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+ensure_node_runtime() {
+  # En vanlig terminal kan sakna nvm i PATH och då välja systemets Node 18.
+  if [[ "$(node_major || true)" -lt 22 ]]; then
+    local nvm_script="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+    if [[ -f "$nvm_script" ]]; then
+      # shellcheck source=/dev/null
+      source "$nvm_script"
+      nvm use --silent 22 >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$(node_major || true)" -lt 22 ]]; then
+    echo "Matrik kräver Node.js 22 eller senare. Installerad version: $(node --version 2>/dev/null || echo saknas)." >&2
+    echo "Installera Node.js 22 eller kör 'nvm install 22' och försök igen." >&2
+    exit 1
+  fi
+}
+
 # Återanvänd en redan startad lokal Matrik-instans. En Vite-sida utan
 # fungerande API räknas inte som en startad app.
 existing_page=""
@@ -28,6 +53,7 @@ done
 
 if [[ -n "$existing_page" ]]; then
   echo "Webbsidan körs, men API-servern svarar inte. Startar API-servern..."
+  ensure_node_runtime
   npm run dev:server &
   api_pid=$!
   for _ in {1..20}; do
@@ -52,6 +78,8 @@ if curl -fsS --max-time 1 http://127.0.0.1:4173/ 2>/dev/null | grep -Fq '<title>
   open_page http://127.0.0.1:4173/
   exit 0
 fi
+
+ensure_node_runtime
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "Node.js och npm behövs för att starta Matrik." >&2

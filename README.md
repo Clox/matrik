@@ -17,7 +17,7 @@ npm install
 ./start-matrik.sh
 ```
 
-Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet startar servern och öppnar rätt adress i webbläsaren. Om Matrik redan körs öppnar det den befintliga sidan. Avsluta en server som skriptet startat med Ctrl+C i terminalen. Välj **Logga in med Google** och godkänn Sheets/Drive-åtkomst vid första starten. Om port 5173 används väljer Vite nästa lediga port. API-servern körs bara på `127.0.0.1:4173`. Du kan fortfarande använda `npm run dev` om du vill starta utan att öppna webbläsaren. För en färdig lokal byggning: `npm run build && npm start`, öppna sedan `http://127.0.0.1:4173`.
+Senare räcker det att köra `./start-matrik.sh` från projektmappen. Skriptet startar servern och öppnar rätt adress i webbläsaren. Om Matrik redan körs öppnar det den befintliga sidan. Vid ny start väljer skriptet installerad Node.js 22 via nvm om terminalen annars använder en äldre systemversion. Avsluta en server som skriptet startat med Ctrl+C i terminalen. Välj **Logga in med Google** och godkänn Sheets/Drive-åtkomst vid första starten. Om port 5173 används väljer Vite nästa lediga port. API-servern körs bara på `127.0.0.1:4173`. Du kan fortfarande använda `npm run dev` om du vill starta utan att öppna webbläsaren. För en färdig lokal byggning: `npm run build && npm start`, öppna sedan `http://127.0.0.1:4173`.
 
 ## Första kontrollen med M007
 
