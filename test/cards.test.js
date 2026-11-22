@@ -118,6 +118,22 @@ test("samma SVG kan renderas i preview och export i tryckstorlek", async () => {
   assert.equal(meta.height, 2992);
   assert.ok(Math.abs(meta.density - 800) < 1);
 });
+test("baksidan använder den större gemensamma textstorleken utan fallback", () => {
+  const recipe = makeCatalog(fixture).recipes[0];
+  const layout = backCardLayout(
+    recipe,
+    resolvePrintProfile(DEFAULT_PRINT_PROFILE),
+    scaledQuantity,
+  );
+  assert.ok(layout.rows.every((row) => row.nameSize === 19));
+  assert.ok(layout.rows.every((row) => row.height === 27));
+  assert.equal(layout.dividerY - layout.rows.at(-1).y - 27, 7);
+  const svg = renderCard(recipe, "back");
+  assert.match(svg, /font-size="19">Ingrediens A/);
+  assert.match(svg, /font-size="18" fill="[^"]+">g<\/text>/);
+  assert.match(svg, /font-size="19" font-weight="700">500<\/text>/);
+  assert.match(svg, /font-size="20">Blanda och servera\.<\/text>/);
+});
 test("MPC-profilen skiljer 800 ppi export från 300 ppi fotokrav", () => {
   const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
   assert.equal(profile.trimWidthMm, 63);

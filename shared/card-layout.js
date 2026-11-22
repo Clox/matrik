@@ -135,16 +135,9 @@ export function backCardLayout(recipe, profile, quantityFor) {
   let y = tableY;
   const rows = standardCardIngredients(recipe).map((item, index) => {
     const label = cardIngredientName(item);
-    let nameSize = 18;
-    let names = wrapCardText(label, nameSize, 259);
-    if (
-      names.length > 2 ||
-      names.some((text) => cardTextWidth(text, nameSize) > 259)
-    ) {
-      nameSize = 15;
-      names = wrapCardText(label, nameSize, 259);
-    }
-    const height = names.length === 2 ? 43 : 29;
+    const nameSize = 19;
+    const names = wrapCardText(label, nameSize, 259);
+    const height = names.length === 2 ? 41 : 27;
     const nameBounds = names.map((text, line) =>
       add(`Ingrediens ${index + 1}`, text, nameSize, left, y + 20 + line * 17),
     );
@@ -152,9 +145,9 @@ export function backCardLayout(recipe, profile, quantityFor) {
       quantityFor(item, portions, recipe.servings),
     );
     const unit = cardUnit(item, quantities);
-    const unitBounds = add(`Enhet ${index + 1}`, unit, 17, unitX, y + 20);
+    const unitBounds = add(`Enhet ${index + 1}`, unit, 18, unitX, y + 20);
     const quantityBounds = quantities.map((text, col) =>
-      add(`Mängd ${index + 1}`, text, 18, columns[col], y + 20, true, "end"),
+      add(`Mängd ${index + 1}`, text, 19, columns[col], y + 20, true, "end"),
     );
     const row = {
       y,
@@ -171,19 +164,19 @@ export function backCardLayout(recipe, profile, quantityFor) {
     y += height;
     return row;
   });
-  const dividerY = y + 9;
+  const dividerY = y + 7;
   const instructionLines = wrapCardText(
     recipe.cardRecipe || recipe.recipe,
-    19,
+    20,
     right - left,
   );
   const instructions = instructionLines.map((text, index) => {
-    const baseline = dividerY + 25 + index * 23;
+    const baseline = dividerY + 23 + index * 24;
     return {
       text,
       x: left,
       y: baseline,
-      bounds: add(`Instruktion ${index + 1}`, text, 19, left, baseline),
+      bounds: add(`Instruktion ${index + 1}`, text, 20, left, baseline),
     };
   });
   const errors = [];

@@ -320,16 +320,16 @@ export function renderCard(
       const values = row.quantities
         .map(
           (value, col) =>
-            `<text x="${layout.columns[col]}" y="${row.y + 20}" text-anchor="end" font-size="18" font-weight="700">${esc(value)}</text>`,
+            `<text x="${layout.columns[col]}" y="${row.y + 20}" text-anchor="end" font-size="19" font-weight="700">${esc(value)}</text>`,
         )
         .join("");
-      return `<rect x="${layout.left - 14}" y="${row.y}" width="${layout.right - layout.left + 19}" height="${row.height}" fill="${index % 2 ? theme.back.stripe : theme.back.row}"/>${names}<text x="${layout.unitX}" y="${row.y + 20}" font-size="17" fill="${theme.back.unit}">${esc(row.unit)}</text>${values}`;
+      return `<rect x="${layout.left - 14}" y="${row.y}" width="${layout.right - layout.left + 19}" height="${row.height}" fill="${index % 2 ? theme.back.stripe : theme.back.row}"/>${names}<text x="${layout.unitX}" y="${row.y + 20}" font-size="18" fill="${theme.back.unit}">${esc(row.unit)}</text>${values}`;
     })
     .join("");
   const instructions = layout.instructions
     .map(
       ({ text, x, y }) =>
-        `<text x="${x}" y="${y}" font-size="19">${esc(text)}</text>`,
+        `<text x="${x}" y="${y}" font-size="20">${esc(text)}</text>`,
     )
     .join("");
   return `${svgStart(profile)}<rect width="${profile.widthUnits}" height="${profile.heightUnits}" fill="${theme.back.paper}"/><g font-family="Noto Sans, sans-serif" fill="${theme.back.body}">${backTitle}${backTime}<line x1="${layout.left - 14}" x2="${layout.right + 5}" y1="${layout.ruleY}" y2="${layout.ruleY}" stroke="${theme.back.rule}"/><text x="${layout.left}" y="${layout.headingY}" font-size="14" fill="${theme.back.accent}">INGREDIENSER</text>${headings}${rows}<line x1="${layout.left - 4}" x2="${layout.right}" y1="${layout.dividerY}" y2="${layout.dividerY}" stroke="${theme.back.rule}" stroke-width="1.3"/>${instructions}</g></svg>`;
