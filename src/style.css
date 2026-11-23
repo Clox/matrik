@@ -436,6 +436,21 @@ h3 {
   align-items: center;
   gap: 15px;
 }
+.format-choice {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #405747;
+}
+.format-choice select {
+  min-width: 185px;
+  padding: 7px 9px;
+  border: 1px solid #b9c6b6;
+  border-radius: 8px;
+  background: #fff;
+  color: #203529;
+}
 .badge,
 .id-tag,
 .format {

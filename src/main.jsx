@@ -26,6 +26,8 @@ import {
   normalizeCrop,
 } from "../shared/image-crop.js";
 import "./style.css";
+import { cropForProfile, recipeForProfile } from "../shared/image-variants.js";
+import { photoQualityRule } from "../shared/photo-quality.js";
 
 async function json(url, options = {}) {
   const response = await fetch(url, options);
@@ -98,6 +100,7 @@ function withImageState(current, updated, imageDataUrl = current.imageDataUrl) {
     imageVariants: updated.imageVariants,
     selectedImageVariantId: updated.selectedImageVariantId,
     imageCrop: updated.imageCrop,
+    imageCropTarot: updated.imageCropTarot,
     imageWidth: updated.imageWidth,
     imageHeight: updated.imageHeight,
     revision: updated.revision,
@@ -565,17 +568,19 @@ function ImageVariants({
   const dragRef = useRef(null);
   const width = Number(current?.width || recipe.imageWidth);
   const height = Number(current?.height || recipe.imageHeight);
-  const limits = width && height ? cropLimits(width, height, profile) : null;
+  const quality = photoQualityRule(recipe, profile, width, height);
+  const limits =
+    width && height ? cropLimits(width, height, quality.profile) : null;
   const crop =
     recipe.imageCrop ||
-    (width && height ? centeredCrop(width, height, profile) : null);
+    (width && height ? centeredCrop(width, height, quality.profile) : null);
   const dpi =
     crop && width && height
-      ? Math.floor(effectiveDpi(crop, width, height, profile))
+      ? Math.floor(effectiveDpi(crop, width, height, quality.profile))
       : 0;
   const update = (next, commit = false) => {
     if (!limits?.possible) return;
-    const safe = normalizeCrop(next, width, height, profile);
+    const safe = normalizeCrop(next, width, height, quality.profile);
     onCropChange(safe);
     if (commit) onCropCommit(safe);
   };
@@ -834,8 +839,9 @@ function ImageVariants({
               />
             </label>
             <p className="crop-dpi">
-              Effektiv fotoupplösning: {dpi} ppi (minst {profile.minPhotoPpi}{" "}
-              ppi) · original {width} × {height} px
+              Effektiv fotoupplösning: {dpi} ppi (minst {quality.minimumPpi} ppi
+              {quality.exception ? ", dokumenterat tarotundantag" : ""}) ·
+              original {width} × {height} px
             </p>
           </>
         )}
@@ -865,7 +871,7 @@ function Settings({
       name:
         key === "name"
           ? value
-          : current.id === DEFAULT_PRINT_PROFILE.id
+          : PRINT_PROFILES.some((item) => item.id === current.id)
             ? "Egen profil"
             : current.name,
       [key]: value,
@@ -917,7 +923,7 @@ function Settings({
         ? Object.fromEntries(
             FRONT_STYLES.map((style) => [
               style.id,
-              renderCard(cardRecipe, "front", {
+              renderCard(recipeForProfile(cardRecipe, printProfile), "front", {
                 frontStyle: style.id,
                 printProfile,
               }),
@@ -991,15 +997,19 @@ function Settings({
             Profil
             <select
               value={
-                profileDraft.id === DEFAULT_PRINT_PROFILE.id
-                  ? DEFAULT_PRINT_PROFILE.id
+                PRINT_PROFILES.some((item) => item.id === profileDraft.id)
+                  ? profileDraft.id
                   : "custom"
               }
               onChange={(event) => {
                 setProfileError("");
                 setProfileDraft(
-                  event.target.value === DEFAULT_PRINT_PROFILE.id
-                    ? { ...DEFAULT_PRINT_PROFILE }
+                  PRINT_PROFILES.some((item) => item.id === event.target.value)
+                    ? {
+                        ...PRINT_PROFILES.find(
+                          (item) => item.id === event.target.value,
+                        ),
+                      }
                     : { ...profileDraft, id: "custom", name: "Egen profil" },
                 );
               }}
@@ -1041,9 +1051,11 @@ function Settings({
           ))}
         </div>
         <p className="profile-note">
-          MPC:s dokumenterade minimum är 822 × 1122 px. Matrik exporterar
-          standardprofilen i 2192 × 2992 px vid 800 ppi. Fotots effektiva
-          upplösning kontrolleras separat mot minst 300 ppi.
+          Poker exporteras i 2192 × 2992 px och tarot i 2400 × 4000 px, båda vid
+          800 ppi. MPC:s dokumenterade uppladdningsminimum är 822 × 1122
+          respektive 897 × 1497 px. Källfotots effektiva upplösning kontrolleras
+          separat mot 300 ppi eller ett uttryckligt dokumenterat undantag för en
+          vald tarotbild.
         </p>
         {profileError && (
           <p className="profile-error" role="alert">
@@ -1504,12 +1516,14 @@ function App() {
       const saved = JSON.parse(
         localStorage.getItem("matrik.settings.printProfile"),
       );
-      if (saved?.id === DEFAULT_PRINT_PROFILE.id) return DEFAULT_PRINT_PROFILE;
+      const preset = PRINT_PROFILES.find((item) => item.id === saved?.id);
+      if (preset) return preset;
       return printProfileErrors(saved).length ? DEFAULT_PRINT_PROFILE : saved;
     } catch {
       return DEFAULT_PRINT_PROFILE;
     }
   });
+  const [deckJob, setDeckJob] = useState(null);
   useEffect(() => {
     try {
       localStorage.setItem("matrik.settings.frontStyle", frontStyle);
@@ -1785,8 +1799,10 @@ function App() {
     }
   };
   const changeCrop = (crop) => {
-    setDraft((current) => ({ ...current, imageCrop: crop }));
-    setPreview((current) => ({ ...current, imageCrop: crop }));
+    const key =
+      printProfile.id === "mpc-tarot" ? "imageCropTarot" : "imageCrop";
+    setDraft((current) => ({ ...current, [key]: crop }));
+    setPreview((current) => ({ ...current, [key]: crop }));
   };
   const commitCrop = (crop) => {
     if (!draft?.selectedImageVariantId) return;
@@ -1831,7 +1847,39 @@ function App() {
   const exportFile = async (target) => {
     setMessage("");
     try {
-      await download(target, draft, status.csrf, frontStyle, printProfile);
+      await download(
+        target,
+        recipeForProfile(draft, printProfile),
+        status.csrf,
+        frontStyle,
+        printProfile,
+      );
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+  const exportDeck = async () => {
+    setMessage("");
+    try {
+      const job = await json("/api/export/deck", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-matrik-csrf": status.csrf,
+        },
+        body: JSON.stringify({ format: printProfile.id.replace("mpc-", "") }),
+      });
+      setDeckJob(job);
+      const poll = async () => {
+        try {
+          const updated = await json(`/api/export/deck/${job.id}`);
+          setDeckJob(updated);
+          if (updated.status === "running") setTimeout(poll, 1500);
+        } catch (error) {
+          setDeckJob({ ...job, status: "error", error: error.message });
+        }
+      };
+      setTimeout(poll, 1500);
     } catch (error) {
       setMessage(error.message);
     }
@@ -2096,6 +2144,28 @@ function App() {
                 <h1>{draft.name || "Namnlös rätt"}</h1>
               </div>
               <div className="top-actions">
+                <label className="format-choice">
+                  Kortformat
+                  <select
+                    aria-label="Kortformat"
+                    value={printProfile.id}
+                    onChange={(event) =>
+                      setPrintProfile(
+                        PRINT_PROFILES.find(
+                          (item) => item.id === event.target.value,
+                        ) || DEFAULT_PRINT_PROFILE,
+                      )
+                    }
+                  >
+                    <option value="mpc-poker">Poker · 63 × 88 mm</option>
+                    <option value="mpc-tarot">Tarot · 69,85 × 120,65 mm</option>
+                    {printProfile.id === "custom" && (
+                      <option value="custom" disabled>
+                        Egen profil
+                      </option>
+                    )}
+                  </select>
+                </label>
                 <span className="badge">{draft.status || "Utan status"}</span>
                 <button className="primary" disabled={saving} onClick={save}>
                   {saving ? "Sparar…" : "Spara i Sheet"}
@@ -2218,7 +2288,13 @@ function App() {
                           imageCrop:
                             draft.imageVariants.find(
                               (variant) => variant.id === pendingVariantId,
-                            )?.crop || null,
+                            ) &&
+                            cropForProfile(
+                              draft.imageVariants.find(
+                                (variant) => variant.id === pendingVariantId,
+                              ),
+                              printProfile,
+                            ),
                           imageWidth: draft.imageVariants.find(
                             (variant) => variant.id === pendingVariantId,
                           )?.width,
@@ -2226,7 +2302,7 @@ function App() {
                             (variant) => variant.id === pendingVariantId,
                           )?.height,
                         }
-                      : preview || draft
+                      : recipeForProfile(preview || draft, printProfile)
                   }
                   frontStyle={frontStyle}
                   printProfile={printProfile}
@@ -2243,7 +2319,7 @@ function App() {
                 />
                 <ImageVariants
                   key={draft.id}
-                  recipe={draft}
+                  recipe={recipeForProfile(draft, printProfile)}
                   profile={resolvePrintProfile(printProfile)}
                   onSelect={selectImageVariant}
                   onUpload={upload}
@@ -2278,7 +2354,38 @@ function App() {
                     <button onClick={() => exportFile("/api/export/proof")}>
                       ↓ A4 proof PDF
                     </button>
+                    <button
+                      onClick={exportDeck}
+                      disabled={
+                        deckJob?.status === "running" ||
+                        !PRINT_PROFILES.some(
+                          (item) => item.id === printProfile.id,
+                        )
+                      }
+                    >
+                      ↓ Hela kortleken (
+                      {printProfile.id === "mpc-tarot" ? "Tarot" : "Poker"})
+                    </button>
                   </div>
+                  {deckJob?.status === "running" && (
+                    <p role="status">
+                      Exporterar {deckJob.format}: {deckJob.progress}
+                    </p>
+                  )}
+                  {deckJob?.status === "error" && (
+                    <p className="notice" role="alert">
+                      Kortleksexport misslyckades: {deckJob.error}
+                    </p>
+                  )}
+                  {deckJob?.status === "done" && (
+                    <p role="status">
+                      Kortleken är klar:{" "}
+                      <a href={`/api/export/deck/${deckJob.id}/zip`}>
+                        Hämta ZIP
+                      </a>
+                      . Sparad privat i {deckJob.out}.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { CARD_FONT_METRICS } from "./card-font-metrics.js";
 import { cardIngredientName, cardUnit } from "./ingredient-label.js";
 import { standardCardIngredients } from "./ingredient-order.js";
+import { cardGeometry } from "./card-geometry.js";
 
 const glyph = (char, bold) =>
   CARD_FONT_METRICS[bold ? "bold" : "regular"][char] ||
@@ -64,6 +65,7 @@ export function wrapCardText(value, size, maxWidth, bold = false) {
 }
 
 export function backCardLayout(recipe, profile, quantityFor) {
+  const geometry = cardGeometry(profile);
   const safe = (profile.bleedMm + profile.safeMm) * 10;
   const right = profile.widthUnits - safe;
   const bottom = profile.heightUnits - safe;
@@ -71,7 +73,11 @@ export function backCardLayout(recipe, profile, quantityFor) {
   const title = `${recipe.shortName || recipe.name || "Namnlös rätt"} · ${recipe.id || ""}`;
   const rawTitle = recipe.shortName || recipe.name || "";
   const titleSize =
-    rawTitle.length <= 16 ? 43 : rawTitle.length <= 22 ? 34 : 27;
+    rawTitle.length <= 16
+      ? geometry.titleSizes[0]
+      : rawTitle.length <= 22
+        ? geometry.titleSizes[1]
+        : geometry.titleSizes[2];
   let titleLines = wrapCardText(title, titleSize, right - left, true);
   if (titleLines.length === 2) {
     const words = title.split(/\s+/);
@@ -100,20 +106,20 @@ export function backCardLayout(recipe, profile, quantityFor) {
           : best,
       );
   }
-  const titleBase = safe + 43.5;
-  const titleShift = Math.max(0, titleLines.length - 1) * 34;
+  const titleBase = safe + geometry.titleBase;
+  const titleShift = Math.max(0, titleLines.length - 1) * geometry.titleStep;
   const times = [
     recipe.activeTime ? `${recipe.activeTime} min aktiv` : "",
     recipe.totalTime ? `${recipe.totalTime} min totalt` : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  const timesY = safe + 73.5 + titleShift; // +5 vs the approved prototype
-  const ruleY = safe + 86.5 + titleShift;
-  const headingY = safe + 105.5 + titleShift;
-  const tableY = safe + 114.5 + titleShift;
+  const timesY = safe + geometry.timesY + titleShift;
+  const ruleY = safe + geometry.ruleY + titleShift;
+  const headingY = safe + geometry.headingY + titleShift;
+  const tableY = safe + geometry.tableY + titleShift;
   const columns = [right - 185, right - 105, right - 15];
-  const unitX = left + 269;
+  const unitX = left + geometry.unitOffset;
   const boxes = [];
   const add = (label, text, size, x, y, bold = false, anchor) => {
     const bounds = cardTextBounds(text, size, x, y, bold, anchor);
@@ -123,31 +129,67 @@ export function backCardLayout(recipe, profile, quantityFor) {
   const titleRows = titleLines.map((text, index) => ({
     text,
     x: left,
-    y: titleBase + index * 34,
+    y: titleBase + index * geometry.titleStep,
     size: titleSize,
-    bounds: add("Titel", text, titleSize, left, titleBase + index * 34, true),
+    bounds: add(
+      "Titel",
+      text,
+      titleSize,
+      left,
+      titleBase + index * geometry.titleStep,
+      true,
+    ),
   }));
-  const timeBounds = add("Tider", times, 17, left + 18, timesY);
-  add("Ingrediensrubrik", "INGREDIENSER", 14, left, headingY);
+  const timeBounds = add("Tider", times, geometry.timeSize, left + 18, timesY);
+  add("Ingrediensrubrik", "INGREDIENSER", geometry.headingSize, left, headingY);
   ["4", "6", "8"].forEach((text, index) =>
-    add("Portionsrubrik", text, 16, columns[index], headingY, false, "end"),
+    add(
+      "Portionsrubrik",
+      text,
+      geometry.portionSize,
+      columns[index],
+      headingY,
+      false,
+      "end",
+    ),
   );
   let y = tableY;
   const rows = standardCardIngredients(recipe).map((item, index) => {
     const label = cardIngredientName(item);
-    const nameSize = 19;
-    const names = wrapCardText(label, nameSize, 259);
-    const height = names.length === 2 ? 41 : 27;
+    const nameSize = geometry.ingredientSize;
+    const names = wrapCardText(label, nameSize, geometry.ingredientWidth);
+    const height =
+      names.length === 2 ? geometry.wrappedRowHeight : geometry.rowHeight;
     const nameBounds = names.map((text, line) =>
-      add(`Ingrediens ${index + 1}`, text, nameSize, left, y + 20 + line * 17),
+      add(
+        `Ingrediens ${index + 1}`,
+        text,
+        nameSize,
+        left,
+        y + geometry.rowBaseline + line * geometry.nameLineStep,
+      ),
     );
     const quantities = [4, 6, 8].map((portions) =>
       quantityFor(item, portions, recipe.servings),
     );
     const unit = cardUnit(item, quantities);
-    const unitBounds = add(`Enhet ${index + 1}`, unit, 18, unitX, y + 20);
+    const unitBounds = add(
+      `Enhet ${index + 1}`,
+      unit,
+      geometry.unitSize,
+      unitX,
+      y + geometry.rowBaseline,
+    );
     const quantityBounds = quantities.map((text, col) =>
-      add(`Mängd ${index + 1}`, text, 19, columns[col], y + 20, true, "end"),
+      add(
+        `Mängd ${index + 1}`,
+        text,
+        geometry.quantitySize,
+        columns[col],
+        y + geometry.rowBaseline,
+        true,
+        "end",
+      ),
     );
     const row = {
       y,
@@ -164,19 +206,26 @@ export function backCardLayout(recipe, profile, quantityFor) {
     y += height;
     return row;
   });
-  const dividerY = y + 7;
+  const dividerY = y + geometry.dividerGap;
   const instructionLines = wrapCardText(
     recipe.cardRecipe || recipe.recipe,
-    20,
+    geometry.instructionSize,
     right - left,
   );
   const instructions = instructionLines.map((text, index) => {
-    const baseline = dividerY + 23 + index * 24;
+    const baseline =
+      dividerY + geometry.instructionStart + index * geometry.instructionStep;
     return {
       text,
       x: left,
       y: baseline,
-      bounds: add(`Instruktion ${index + 1}`, text, 20, left, baseline),
+      bounds: add(
+        `Instruktion ${index + 1}`,
+        text,
+        geometry.instructionSize,
+        left,
+        baseline,
+      ),
     };
   });
   const errors = [];
@@ -224,11 +273,15 @@ export function backCardLayout(recipe, profile, quantityFor) {
     tableY,
     columns,
     unitX,
+    geometry,
     rows,
     dividerY,
     instructions,
     boxes,
     errors,
     remainingUnits: bottom - (instructions.at(-1)?.bounds?.bottom ?? dividerY),
+    fillRatio:
+      ((instructions.at(-1)?.bounds?.bottom ?? dividerY) - safe) /
+      (bottom - safe),
   };
 }

@@ -11,6 +11,18 @@ export const PRINT_PROFILES = [
     exportWidthPx: 2192,
     exportHeightPx: 2992,
   },
+  {
+    id: "mpc-tarot",
+    name: "MakePlayingCards - Tarot 2,75 × 4,75 tum",
+    trimWidthMm: 69.85,
+    trimHeightMm: 120.65,
+    bleedMm: 3.175,
+    safeMm: 3.175,
+    dpi: 800,
+    minPhotoPpi: 300,
+    exportWidthPx: 2400,
+    exportHeightPx: 4000,
+  },
 ];
 
 export const DEFAULT_PRINT_PROFILE = PRINT_PROFILES[0];
@@ -60,18 +72,22 @@ export function printProfileErrors(profile) {
     errors.push(
       `Export height måste vara minst ${minHeight} px för mått och DPI.`,
     );
-  if (profile.id === DEFAULT_PRINT_PROFILE.id) {
+  const preset = PRINT_PROFILES.find((item) => item.id === profile.id);
+  if (preset) {
     if (
       ["trimWidthMm", "trimHeightMm", "bleedMm", "safeMm", "dpi"].some(
-        (key) => Number(profile[key]) !== DEFAULT_PRINT_PROFILE[key],
+        (key) => Number(profile[key]) !== preset[key],
       )
     )
       errors.push("Välj Egen profil för att ändra MPC:s standardmått.");
+    const minimum = preset.id === "mpc-tarot" ? [897, 1497] : [822, 1122];
     if (
-      Number(profile.exportWidthPx) < 822 ||
-      Number(profile.exportHeightPx) < 1122
+      Number(profile.exportWidthPx) < minimum[0] ||
+      Number(profile.exportHeightPx) < minimum[1]
     )
-      errors.push("MPC-profilen kräver minst 822 × 1122 px.");
+      errors.push(
+        `MPC-profilen kräver minst ${minimum[0]} × ${minimum[1]} px.`,
+      );
   }
   return errors;
 }

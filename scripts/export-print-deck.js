@@ -14,21 +14,37 @@ import {
 import { cachedImage } from "../server/image-cache.js";
 import { renderSvgPng } from "../server/render-card-png.js";
 import { renderCard, validateCard } from "../shared/cards.js";
-import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
+import { normalizeCrop } from "../shared/image-crop.js";
+import { recipeForProfile } from "../shared/image-variants.js";
+import {
+  photoQualityRule,
+  photoQualityCheck,
+} from "../shared/photo-quality.js";
 import { currentRecipes } from "../shared/recipe-status.js";
 import {
-  DEFAULT_PRINT_PROFILE,
+  PRINT_PROFILES,
   resolvePrintProfile,
 } from "../shared/print-profile.js";
 
 const exec = promisify(execFile);
-const profile = resolvePrintProfile(DEFAULT_PRINT_PROFILE);
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
   const at = args.indexOf(name);
   return at < 0 ? fallback : args[at + 1];
 };
-const out = path.resolve(option("--out", ".local/print/current"));
+const format = option("--format", "poker");
+if (!["poker", "tarot"].includes(format))
+  throw new Error("--format måste vara poker eller tarot.");
+const selectedProfile = PRINT_PROFILES.find(
+  (item) => item.id === `mpc-${format}`,
+);
+const profile = resolvePrintProfile(selectedProfile);
+const out = path.resolve(
+  option(
+    "--out",
+    `.local/print/${format}-${new Date().toISOString().replaceAll(/[:.]/g, "-")}`,
+  ),
+);
 const expectedOption = option("--expected", null);
 const expected = expectedOption === null ? null : Number(expectedOption);
 const privateRoot = path.resolve(".local") + path.sep;
@@ -69,7 +85,8 @@ if (existingCards.length)
   );
 await fs.mkdir(cardsDir, { recursive: true, mode: 0o700 });
 const entries = [];
-for (const [index, recipe] of recipes.entries()) {
+for (const [index, sourceRecipe] of recipes.entries()) {
+  const recipe = recipeForProfile(sourceRecipe, selectedProfile);
   const file = await findImageFile(auth, recipe);
   if (!file)
     throw new Error(
@@ -84,8 +101,13 @@ for (const [index, recipe] of recipes.entries()) {
   if (
     !imageMeta.width ||
     !imageMeta.height ||
-    !cropLimits(imageMeta.width, imageMeta.height, DEFAULT_PRINT_PROFILE)
-      .possible
+    !photoQualityCheck(
+      recipe,
+      selectedProfile,
+      imageMeta.width,
+      imageMeta.height,
+      recipe.imageCrop,
+    ).possible
   )
     throw new Error(
       `${recipe.id}: Bildens originalpixlar räcker inte för minsta foto-PPI efter beskärning.`,
@@ -103,7 +125,12 @@ for (const [index, recipe] of recipes.entries()) {
       recipe.imageCrop,
       imageMeta.width,
       imageMeta.height,
-      DEFAULT_PRINT_PROFILE,
+      photoQualityRule(
+        recipe,
+        selectedProfile,
+        imageMeta.width,
+        imageMeta.height,
+      ).profile,
     );
   const card = {
     ...recipe,
@@ -111,22 +138,22 @@ for (const [index, recipe] of recipes.entries()) {
     imageWidth: imageMeta.width,
     imageHeight: imageMeta.height,
   };
-  const issues = validateCard(card, DEFAULT_PRINT_PROFILE);
+  const issues = validateCard(card, selectedProfile);
   const errors = issues.filter((issue) => issue.level === "error");
   if (errors.length)
     throw new Error(
       `${recipe.id}: ${errors.map((issue) => issue.message).join(" ")}`,
     );
-  const prefix = `${String(index + 1).padStart(3, "0")}_${recipe.id}`;
+  const prefix = `${format}_${String(index + 1).padStart(3, "0")}_${recipe.id}`;
   const sides = {};
   for (const side of ["front", "back"]) {
     const name = `${prefix}_${side}.png`;
     const target = path.join(cardsDir, name);
     const svg = renderCard(card, side, {
       frontStyle: "panel",
-      printProfile: DEFAULT_PRINT_PROFILE,
+      printProfile: selectedProfile,
     });
-    const png = await renderSvgPng(svg, DEFAULT_PRINT_PROFILE);
+    const png = await renderSvgPng(svg, selectedProfile);
     const meta = await sharp(png).metadata();
     if (
       meta.width !== profile.widthPx ||
@@ -160,8 +187,33 @@ for (const [index, recipe] of recipes.entries()) {
     imageHeightPx: imageMeta.height,
     imageVariantId: recipe.selectedImageVariantId || "original",
     imageCrop: recipe.imageCrop || null,
+    effectivePhotoPpi: Number(
+      photoQualityCheck(
+        recipe,
+        selectedProfile,
+        imageMeta.width,
+        imageMeta.height,
+        recipe.imageCrop,
+      ).ppi.toFixed(1),
+    ),
+    photoQualityException: photoQualityRule(
+      recipe,
+      selectedProfile,
+      imageMeta.width,
+      imageMeta.height,
+    ).exception,
     ingredientCount: recipe.ingredients.length,
     warnings: [
+      ...(photoQualityRule(
+        recipe,
+        selectedProfile,
+        imageMeta.width,
+        imageMeta.height,
+      ).exception
+        ? [
+            `Tarotundantag: källfotot har ${photoQualityCheck(recipe, selectedProfile, imageMeta.width, imageMeta.height, recipe.imageCrop).ppi.toFixed(1)} effektiv ppi (normalt krav 300).`,
+          ]
+        : []),
       ...issues
         .filter((issue) => issue.level === "warning")
         .map((issue) => issue.message),
@@ -195,6 +247,7 @@ const sourceFingerprint = (items) =>
           imageId: r.imageId,
           imageVariantId: r.selectedImageVariantId,
           imageCrop: r.imageCrop,
+          imageCropTarot: r.imageCropTarot,
           ingredients: r.ingredients,
         })),
       ),
@@ -217,7 +270,8 @@ if (
 const manifest = {
   generatedAt: new Date().toISOString(),
   source: "Google Sheets och kopplade Google Drive-bilder",
-  profile: DEFAULT_PRINT_PROFILE,
+  profile: selectedProfile,
+  format,
   frontStyle: "panel",
   recipeCount: entries.length,
   sideCount: entries.length * 2,

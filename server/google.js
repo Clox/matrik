@@ -12,11 +12,11 @@ import {
 import {
   IMAGE_SHEET,
   IMAGE_HEADERS,
+  TAROT_CROP_HEADER,
+  updatedVariantCrops,
   attachImageVariants,
   driveId,
 } from "../shared/image-variants.js";
-import { normalizeCrop } from "../shared/image-crop.js";
-import { DEFAULT_PRINT_PROFILE } from "../shared/print-profile.js";
 import { validateDisplayOrder } from "../shared/ingredient-order.js";
 
 const localDir = path.resolve(".local");
@@ -151,6 +151,7 @@ export async function loadCatalog(auth) {
   const catalog = makeCatalog(data);
   attachImageVariants(catalog, imageValues);
   catalog.imageSheetExists = Boolean(hasImageSheet);
+  catalog.tarotCropColumnExists = imageValues[0]?.[8] === TAROT_CROP_HEADER;
   catalog.alternativeSheetExists = Boolean(hasAlternativeSheet);
   const cells =
     metadata.data.sheets?.find(
@@ -783,15 +784,43 @@ export async function saveImageVariant(auth, recipeId, input) {
     throw Object.assign(new Error("Bildens originalmått saknas."), {
       status: 422,
     });
-  const crop = input.crop === undefined ? existing?.crop || null : input.crop;
-  const verifiedCrop = crop
-    ? normalizeCrop(
-        crop,
-        width,
-        height,
-        input.printProfile || DEFAULT_PRINT_PROFILE,
-      )
-    : null;
+  const {
+    pokerCrop: verifiedCrop,
+    tarotCrop: verifiedTarotCrop,
+    tarotWrite: tarotCropWrite,
+  } = updatedVariantCrops(existing, input, recipe, width, height);
+  if (tarotCropWrite && !catalog.tarotCropColumnExists) {
+    await backupSpreadsheet(auth, "före tarotbeskärning i Rätt-bilder");
+    const info = await sheets(auth).spreadsheets.get({
+      spreadsheetId,
+      fields: "sheets(properties(sheetId,title,gridProperties(columnCount)))",
+    });
+    const props = info.data.sheets?.find(
+      (item) => item.properties?.title === IMAGE_SHEET,
+    )?.properties;
+    if (!props) throw new Error("Rätt-bilder saknas efter kontroll.");
+    if (props.gridProperties.columnCount < 9)
+      await sheets(auth).spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              appendDimension: {
+                sheetId: props.sheetId,
+                dimension: "COLUMNS",
+                length: 9 - props.gridProperties.columnCount,
+              },
+            },
+          ],
+        },
+      });
+    await sheets(auth).spreadsheets.values.update({
+      spreadsheetId,
+      range: `${q(IMAGE_SHEET)}!I1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [[TAROT_CROP_HEADER]] },
+    });
+  }
   const row =
     existing?.rowNumber ||
     Math.max(
@@ -812,6 +841,7 @@ export async function saveImageVariant(auth, recipeId, input) {
       width,
       height,
       crop: verifiedCrop,
+      tarotCrop: verifiedTarotCrop,
       description: String(input.description ?? existing?.description ?? ""),
       rowNumber: row,
     },
@@ -836,6 +866,11 @@ export async function saveImageVariant(auth, recipeId, input) {
       ],
     },
   ];
+  if (tarotCropWrite)
+    updates.push({
+      range: `${q(IMAGE_SHEET)}!I${row}`,
+      values: [[verifiedTarotCrop ? JSON.stringify(verifiedTarotCrop) : ""]],
+    });
   if (input.selected) {
     for (const other of recipe.imageVariants)
       if (other.id !== id && other.selected && other.rowNumber)
@@ -871,6 +906,7 @@ export async function saveImageVariant(auth, recipeId, input) {
     selectedImageVariantId: selected.id,
     imageId: selected.fileId,
     imageCrop: selected.crop,
+    imageCropTarot: selected.tarotCrop,
     imageWidth: selected.width,
     imageHeight: selected.height,
   };

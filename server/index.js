@@ -4,6 +4,7 @@ import multer from "multer";
 import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import sharp from "sharp";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { FRONT_STYLES, renderCard, validateCard } from "../shared/cards.js";
@@ -29,13 +30,19 @@ import {
   withRevisions,
 } from "./google.js";
 import { cachedImage, imageEtag, invalidateImage } from "./image-cache.js";
-import { cropLimits, normalizeCrop } from "../shared/image-crop.js";
+import { normalizeCrop } from "../shared/image-crop.js";
+import { recipeForProfile } from "../shared/image-variants.js";
+import {
+  photoQualityRule,
+  photoQualityCheck,
+} from "../shared/photo-quality.js";
 import { renderSvgPng } from "./render-card-png.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
 const states = new Map();
 const csrf = crypto.randomBytes(24).toString("hex");
+const deckJobs = new Map();
 let imageCatalogCache = null;
 function imageCatalog(auth) {
   if (imageCatalogCache && Date.now() - imageCatalogCache.at < 30_000)
@@ -256,7 +263,7 @@ async function exportRecipe(req) {
   recipe.imageCrop =
     recipe.selectedImageVariantId === selectedRecipe.selectedImageVariantId
       ? recipe.imageCrop
-      : selectedRecipe.imageCrop;
+      : recipeForProfile(selectedRecipe, recipe.printProfile).imageCrop;
   recipe.imageWidth = selectedRecipe.imageWidth;
   recipe.imageHeight = selectedRecipe.imageHeight;
   const file = await findImageFile(auth, recipe);
@@ -270,7 +277,13 @@ async function exportRecipe(req) {
     if (
       !meta.width ||
       !meta.height ||
-      !cropLimits(meta.width, meta.height, recipe.printProfile).possible
+      !photoQualityCheck(
+        recipe,
+        recipe.printProfile,
+        meta.width,
+        meta.height,
+        recipe.imageCrop,
+      ).possible
     )
       throw Object.assign(
         new Error(
@@ -283,7 +296,8 @@ async function exportRecipe(req) {
         recipe.imageCrop,
         meta.width,
         meta.height,
-        recipe.printProfile,
+        photoQualityRule(recipe, recipe.printProfile, meta.width, meta.height)
+          .profile,
       );
     recipe.imageWidth = meta.width;
     recipe.imageHeight = meta.height;
@@ -320,7 +334,7 @@ app.post(
     const recipe = await exportRecipe(req);
     res.set({
       "Content-Type": "image/png",
-      "Content-Disposition": `attachment; filename="${recipe.id}-${req.params.side}.png"`,
+      "Content-Disposition": `attachment; filename="${recipe.id}-${recipe.printProfile.id}-${req.params.side}.png"`,
       "Cache-Control": "no-store",
     });
     res.send(await png(recipe, req.params.side));
@@ -386,6 +400,78 @@ app.post(
     res.send(Buffer.from(await pdf.save()));
   }),
 );
+app.post("/api/export/deck", sameOrigin, (req, res) => {
+  if (!readTokens())
+    return res.status(401).json({ error: "Logga in hos Google först." });
+  const format = req.body?.format;
+  if (!["poker", "tarot"].includes(format))
+    return res.status(422).json({ error: "Välj poker eller tarot." });
+  if ([...deckJobs.values()].some((item) => item.status === "running"))
+    return res.status(409).json({ error: "En kortlek exporteras redan." });
+  const id = crypto.randomUUID();
+  const out = path.resolve(
+    ".local",
+    "print",
+    `${format}-${new Date().toISOString().replaceAll(/[:.]/g, "-")}-${id.slice(0, 8)}`,
+  );
+  const job = {
+    id,
+    format,
+    out,
+    status: "running",
+    progress: "Startar…",
+    error: "",
+  };
+  deckJobs.set(id, job);
+  const child = spawn(
+    process.execPath,
+    ["scripts/export-print-deck.js", "--format", format, "--out", out],
+    { cwd: process.cwd(), env: process.env },
+  );
+  child.stdout.on("data", (chunk) => {
+    job.progress = String(chunk).trim().split("\n").at(-1);
+  });
+  child.stderr.on("data", (chunk) => {
+    job.error = (job.error + String(chunk)).slice(-4000);
+  });
+  child.on("error", (error) => {
+    job.status = "error";
+    job.error = error.message;
+  });
+  child.on("close", (code) => {
+    if (job.status !== "running") return;
+    job.status = code === 0 ? "done" : "error";
+    if (code !== 0 && !job.error) job.error = `Exporten avbröts (${code}).`;
+  });
+  res.status(202).json(job);
+});
+app.get("/api/export/deck/:id", sameOrigin, (req, res) => {
+  const job = deckJobs.get(req.params.id);
+  if (!job) return res.sendStatus(404);
+  res.set("Cache-Control", "no-store").json(job);
+});
+app.get("/api/export/deck/:id/zip", sameOrigin, (req, res) => {
+  const job = deckJobs.get(req.params.id);
+  if (!job || job.status !== "done") return res.sendStatus(404);
+  res.set({
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="matrik-${job.format}-${job.id.slice(0, 8)}.zip"`,
+    "Cache-Control": "no-store",
+  });
+  const child = spawn(
+    "zip",
+    ["-q", "-r", "-", "cards", "manifest.json", "checklista.csv"],
+    { cwd: job.out },
+  );
+  child.stdout.pipe(res);
+  child.stderr.on("data", (chunk) => console.error(String(chunk)));
+  child.on("error", (error) => {
+    console.error(error);
+    if (!res.headersSent) res.status(500).end("ZIP kunde inte skapas.");
+    else res.destroy(error);
+  });
+  res.on("close", () => child.kill());
+});
 const dist = path.resolve("dist");
 if (fs.existsSync(dist)) {
   app.use(express.static(dist));
