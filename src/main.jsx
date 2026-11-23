@@ -93,18 +93,25 @@ async function variantDataUrl(recipeId, variantId, thumbnail) {
 function recipeImageKey(recipe) {
   return `${recipe.id}:${recipe.imageId || recipe.selectedImageVariantId || ""}`;
 }
-function withImageState(current, updated, imageDataUrl = current.imageDataUrl) {
+function withImageState(
+  current,
+  updated,
+  imageDataUrl = current.imageDataUrl,
+  loadedVariantId = current.loadedImageVariantId,
+) {
   return {
     ...current,
     imageId: updated.imageId,
     imageVariants: updated.imageVariants,
     selectedImageVariantId: updated.selectedImageVariantId,
+    selectedImageVariantIdTarot: updated.selectedImageVariantIdTarot,
     imageCrop: updated.imageCrop,
     imageCropTarot: updated.imageCropTarot,
     imageWidth: updated.imageWidth,
     imageHeight: updated.imageHeight,
     revision: updated.revision,
     imageDataUrl,
+    loadedImageVariantId: imageDataUrl ? loadedVariantId : null,
   };
 }
 function useCardImageUrls(cards) {
@@ -563,12 +570,21 @@ function ImageVariants({
   const current =
     variants.find((v) => v.id === recipe.selectedImageVariantId) || variants[0];
   const displayedSelection = pendingVariantId || current?.id;
+  const tarot = profile.id === "mpc-tarot";
   const [largeImage, setLargeImage] = useState(null);
   const imageRef = useRef(null);
   const dragRef = useRef(null);
   const width = Number(current?.width || recipe.imageWidth);
   const height = Number(current?.height || recipe.imageHeight);
   const quality = photoQualityRule(recipe, profile, width, height);
+  const variantPpi = (variant) =>
+    effectiveDpi(
+      cropForProfile(variant, profile) ||
+        centeredCrop(variant.width, variant.height, profile),
+      variant.width,
+      variant.height,
+      profile,
+    );
   const limits =
     width && height ? cropLimits(width, height, quality.profile) : null;
   const crop =
@@ -640,7 +656,7 @@ function ImageVariants({
         <div className="section-head">
           <div>
             <p className="eyebrow">Fotografier</p>
-            <h3>Bildvarianter</h3>
+            <h3>Bildvarianter · {tarot ? "Tarot" : "Poker"}</h3>
           </div>
           <span>{variants.length} st</span>
         </div>
@@ -670,6 +686,16 @@ function ImageVariants({
                     ? `${variant.width} × ${variant.height} px`
                     : "Originalmått läses in"}
                 </small>
+                {variant.width > 0 && variant.height > 0 && (
+                  <small>
+                    {Math.floor(variantPpi(variant))} foto-ppi
+                    {variantPpi(variant) + 0.01 < profile.minPhotoPpi
+                      ? " · För låg upplösning"
+                      : ""}
+                    {variant.selected ? " · Poker vald" : ""}
+                    {variant.selectedTarot ? " · Tarot vald" : ""}
+                  </small>
+                )}
               </button>
               <button
                 type="button"
@@ -681,6 +707,9 @@ function ImageVariants({
             </div>
           ))}
         </div>
+        {tarot && !recipe.selectedImageVariantIdTarot && (
+          <p>Tarot använder pokerbilden tills du väljer en egen tarotbild.</p>
+        )}
         <p className="image-variant-feedback" role="status" aria-live="polite">
           {feedback || "\u00a0"}
         </p>
@@ -839,9 +868,8 @@ function ImageVariants({
               />
             </label>
             <p className="crop-dpi">
-              Effektiv fotoupplösning: {dpi} ppi (minst {quality.minimumPpi} ppi
-              {quality.exception ? ", dokumenterat tarotundantag" : ""}) ·
-              original {width} × {height} px
+              Effektiv fotoupplösning: {dpi} ppi (minst {quality.minimumPpi}{" "}
+              ppi) · original {width} × {height} px
             </p>
           </>
         )}
@@ -897,26 +925,33 @@ function Settings({
     });
     setProfileError("");
   };
+  const formatRecipe = recipeForProfile(recipe, printProfile);
   const recipeId = recipe?.id;
-  const hasImage = Boolean(recipe?.imageDataUrl);
+  const variantId = formatRecipe?.selectedImageVariantId;
+  const hasImage = Boolean(formatRecipe?.imageDataUrl);
   useEffect(() => {
-    if (!recipeId || hasImage) return;
+    if (!recipeId || !variantId || hasImage) return;
     let active = true;
-    fetch(`/api/recipes/${encodeURIComponent(recipeId)}/image`)
+    fetch(
+      `/api/recipes/${encodeURIComponent(recipeId)}/images/${encodeURIComponent(variantId)}`,
+    )
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => blob && toDataUrl(blob))
       .then((dataUrl) => {
-        if (active && dataUrl) setLoadedImage({ recipeId, dataUrl });
+        if (active && dataUrl) setLoadedImage({ recipeId, variantId, dataUrl });
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [recipeId, hasImage]);
+  }, [recipeId, variantId, hasImage]);
   const cardRecipe =
-    recipe && !hasImage && loadedImage?.recipeId === recipeId
-      ? { ...recipe, imageDataUrl: loadedImage.dataUrl }
-      : recipe;
+    formatRecipe &&
+    !hasImage &&
+    loadedImage?.recipeId === recipeId &&
+    loadedImage.variantId === variantId
+      ? { ...formatRecipe, imageDataUrl: loadedImage.dataUrl }
+      : formatRecipe;
   const fronts = useMemo(
     () =>
       cardRecipe
@@ -1483,6 +1518,7 @@ function App() {
       }
     });
   const imageDataCache = useRef(new Map());
+  const selectionContextRef = useRef("");
   const rememberImageData = (recipe, dataUrl) => {
     if (!dataUrl) return;
     const key = recipeImageKey(recipe);
@@ -1491,10 +1527,11 @@ function App() {
     while (imageDataCache.current.size > 6)
       imageDataCache.current.delete(imageDataCache.current.keys().next().value);
   };
-  const cachedImageData = (recipe) => {
+  const cachedImageData = (recipe, baseRecipe = recipe) => {
     const key = recipeImageKey(recipe);
     const cached = imageDataCache.current.get(key);
     if (cached) return cached;
+    if (recipe.imageId !== baseRecipe.imageId) return null;
     const sidebarImage = document.querySelector(
       `.recipe-item[data-recipe-id="${recipe.id}"] img`,
     );
@@ -1609,26 +1646,59 @@ function App() {
     if (!selected || !catalog) return;
     const recipe = catalog.recipes.find((x) => x.id === selected);
     if (!recipe) return;
-    const cached = cachedImageData(recipe);
-    const initial = { ...structuredClone(recipe), imageDataUrl: cached };
-    setDraft(initial);
-    setPreview(initial);
+    const formatRecipe = recipeForProfile(recipe, printProfile);
+    const cached = cachedImageData(formatRecipe, recipe);
+    const initial = {
+      ...structuredClone(recipe),
+      imageDataUrl: cached,
+      loadedImageVariantId: cached ? formatRecipe.selectedImageVariantId : null,
+    };
+    const context = `${selected}:${catalogRequest.generation}`;
+    const freshSelection = selectionContextRef.current !== context;
+    selectionContextRef.current = context;
+    const withFormatImage = (current) =>
+      freshSelection || current?.id !== selected
+        ? initial
+        : {
+            ...current,
+            imageDataUrl: cached,
+            loadedImageVariantId: cached
+              ? formatRecipe.selectedImageVariantId
+              : null,
+          };
+    setDraft(withFormatImage);
+    setPreview(withFormatImage);
     if (cached) return;
     let live = true;
     const controller = new AbortController();
-    fetch(`/api/recipes/${encodeURIComponent(selected)}/image`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/recipes/${encodeURIComponent(selected)}/images/${encodeURIComponent(formatRecipe.selectedImageVariantId)}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then((r) => (r.ok ? r.blob() : null))
       .then((blob) => blob && toDataUrl(blob))
       .then((data) => {
         if (live && data) {
-          rememberImageData(recipe, data);
+          rememberImageData(formatRecipe, data);
           setDraft((d) =>
-            d?.id === selected ? { ...d, imageDataUrl: data } : d,
+            d?.id === selected
+              ? {
+                  ...d,
+                  imageDataUrl: data,
+                  loadedImageVariantId: formatRecipe.selectedImageVariantId,
+                }
+              : d,
           );
           setPreview((d) =>
-            d?.id === selected ? { ...d, imageDataUrl: data } : d,
+            d?.id === selected
+              ? {
+                  ...d,
+                  imageDataUrl: data,
+                  loadedImageVariantId: formatRecipe.selectedImageVariantId,
+                }
+              : d,
           );
         }
       })
@@ -1637,7 +1707,7 @@ function App() {
       live = false;
       controller.abort();
     };
-  }, [selected, catalogRequest.generation]);
+  }, [selected, catalogRequest.generation, printProfile.id]);
   useEffect(() => {
     editorScrollRef.current?.scrollTo(0, 0);
     rightScrollRef.current?.scrollTo(0, 0);
@@ -1663,8 +1733,15 @@ function App() {
   const selectRecipe = (id) => {
     const recipe = catalog?.recipes.find((r) => r.id === id);
     if (recipe) {
-      const imageDataUrl = cachedImageData(recipe);
-      const initial = { ...structuredClone(recipe), imageDataUrl };
+      const formatRecipe = recipeForProfile(recipe, printProfile);
+      const imageDataUrl = cachedImageData(formatRecipe, recipe);
+      const initial = {
+        ...structuredClone(recipe),
+        imageDataUrl,
+        loadedImageVariantId: imageDataUrl
+          ? formatRecipe.selectedImageVariantId
+          : null,
+      };
       setDraft(initial);
       setPreview(initial);
     }
@@ -1714,14 +1791,19 @@ function App() {
     try {
       const form = new FormData();
       form.append("image", file);
+      form.append("printProfile", printProfile.id);
       const result = await json(`/api/recipes/${draft.id}/image`, {
         method: "POST",
         headers: { "x-matrik-csrf": status.csrf },
         body: form,
       });
       const data = await toDataUrl(file);
-      setDraft((d) => withImageState(d, result.recipe, data));
-      setPreview((d) => withImageState(d, result.recipe, data));
+      const loadedId = recipeForProfile(
+        result.recipe,
+        printProfile,
+      ).selectedImageVariantId;
+      setDraft((d) => withImageState(d, result.recipe, data, loadedId));
+      setPreview((d) => withImageState(d, result.recipe, data, loadedId));
       setCatalogRequest((current) => ({
         ...current,
         data: {
@@ -1742,7 +1824,11 @@ function App() {
   };
   const selectImageVariant = async (variant, thumbnail) => {
     if (!draft) return;
-    if (variant.id === draft.selectedImageVariantId) {
+    const activeVariantId = recipeForProfile(
+      draft,
+      printProfile,
+    ).selectedImageVariantId;
+    if (variant.id === activeVariantId) {
       setImageFeedback("Den här bilden är redan vald.");
       return;
     }
@@ -1771,12 +1857,12 @@ function App() {
       );
       setDraft((current) =>
         current?.id === recipeId
-          ? withImageState(current, updated, data)
+          ? withImageState(current, updated, data, variant.id)
           : current,
       );
       setPreview((current) =>
         current?.id === recipeId
-          ? withImageState(current, updated, data)
+          ? withImageState(current, updated, data, variant.id)
           : current,
       );
       setCatalogRequest((current) => ({
@@ -1807,7 +1893,7 @@ function App() {
   const commitCrop = (crop) => {
     if (!draft?.selectedImageVariantId) return;
     const recipeId = draft.id,
-      variantId = draft.selectedImageVariantId;
+      variantId = recipeForProfile(draft, printProfile).selectedImageVariantId;
     clearTimeout(cropSaveTimer.current);
     cropSaveTimer.current = setTimeout(async () => {
       try {
@@ -2015,11 +2101,7 @@ function App() {
               <div className="thumb">
                 {r.id.slice(-2)}
                 <img
-                  src={
-                    r.id === draft?.id && draft.imageDataUrl
-                      ? draft.imageDataUrl
-                      : `/api/recipes/${encodeURIComponent(r.id)}/image?v=${imageRefresh[r.id] || 0}`
-                  }
+                  src={`/api/recipes/${encodeURIComponent(r.id)}/image?v=${imageRefresh[r.id] || 0}`}
                   alt=""
                   loading="lazy"
                   onError={(e) => {

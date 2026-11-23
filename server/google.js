@@ -13,11 +13,14 @@ import {
   IMAGE_SHEET,
   IMAGE_HEADERS,
   TAROT_CROP_HEADER,
+  TAROT_SELECTED_HEADER,
   updatedVariantCrops,
   attachImageVariants,
   driveId,
 } from "../shared/image-variants.js";
 import { validateDisplayOrder } from "../shared/ingredient-order.js";
+import { photoQualityCheck } from "../shared/photo-quality.js";
+import { PRINT_PROFILES } from "../shared/print-profile.js";
 
 const localDir = path.resolve(".local");
 const tokenPath = path.join(localDir, "token.json");
@@ -152,6 +155,8 @@ export async function loadCatalog(auth) {
   attachImageVariants(catalog, imageValues);
   catalog.imageSheetExists = Boolean(hasImageSheet);
   catalog.tarotCropColumnExists = imageValues[0]?.[8] === TAROT_CROP_HEADER;
+  catalog.tarotSelectionColumnExists =
+    imageValues[0]?.[9] === TAROT_SELECTED_HEADER;
   catalog.alternativeSheetExists = Boolean(hasAlternativeSheet);
   const cells =
     metadata.data.sheets?.find(
@@ -789,6 +794,59 @@ export async function saveImageVariant(auth, recipeId, input) {
     tarotCrop: verifiedTarotCrop,
     tarotWrite: tarotCropWrite,
   } = updatedVariantCrops(existing, input, recipe, width, height);
+  const tarotSelectionWrite =
+    input.selected === true && input.printProfile?.id === "mpc-tarot";
+  const pokerSelectionWrite = input.selected === true && !tarotSelectionWrite;
+  if (
+    tarotSelectionWrite &&
+    !photoQualityCheck(
+      recipe,
+      PRINT_PROFILES[1],
+      width,
+      height,
+      verifiedTarotCrop,
+    ).possible
+  )
+    throw Object.assign(
+      new Error("Tarotbilden uppfyller inte 300 effektiv foto-ppi."),
+      { status: 422 },
+    );
+  if (tarotSelectionWrite && !catalog.tarotSelectionColumnExists) {
+    await backupSpreadsheet(auth, "före formatspecifikt bildval i Rätt-bilder");
+    const info = await sheets(auth).spreadsheets.get({
+      spreadsheetId,
+      fields: "sheets(properties(sheetId,title,gridProperties(columnCount)))",
+    });
+    const props = info.data.sheets?.find(
+      (item) => item.properties?.title === IMAGE_SHEET,
+    )?.properties;
+    if (!props) throw new Error("Rätt-bilder saknas efter kontroll.");
+    if (props.gridProperties.columnCount < 10)
+      await sheets(auth).spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              appendDimension: {
+                sheetId: props.sheetId,
+                dimension: "COLUMNS",
+                length: 10 - props.gridProperties.columnCount,
+              },
+            },
+          ],
+        },
+      });
+    await sheets(auth).spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        valueInputOption: "RAW",
+        data: [
+          { range: `${q(IMAGE_SHEET)}!I1`, values: [[TAROT_CROP_HEADER]] },
+          { range: `${q(IMAGE_SHEET)}!J1`, values: [[TAROT_SELECTED_HEADER]] },
+        ],
+      },
+    });
+  }
   if (tarotCropWrite && !catalog.tarotCropColumnExists) {
     await backupSpreadsheet(auth, "före tarotbeskärning i Rätt-bilder");
     const info = await sheets(auth).spreadsheets.get({
@@ -834,10 +892,8 @@ export async function saveImageVariant(auth, recipeId, input) {
     {
       id,
       fileId,
-      selected:
-        input.selected === undefined
-          ? Boolean(existing?.selected)
-          : Boolean(input.selected),
+      selected: !pokerSelectionWrite ? Boolean(existing?.selected) : true,
+      selectedTarot: tarotSelectionWrite || Boolean(existing?.selectedTarot),
       width,
       height,
       crop: verifiedCrop,
@@ -846,11 +902,15 @@ export async function saveImageVariant(auth, recipeId, input) {
       rowNumber: row,
     },
   ];
-  const selected = input.selected
+  const selected = pokerSelectionWrite
     ? variants.find((v) => v.id === id)
     : variants.find((v) => v.selected) || variants[0];
-  const updates = [
-    {
+  const selectedTarot = tarotSelectionWrite
+    ? variants.find((v) => v.id === id)
+    : variants.find((v) => v.selectedTarot);
+  const updates = [];
+  if (!existing || !tarotSelectionWrite || tarotCropWrite)
+    updates.push({
       range: `${q(IMAGE_SHEET)}!A${row}:H${row}`,
       values: [
         [
@@ -864,14 +924,22 @@ export async function saveImageVariant(auth, recipeId, input) {
           String(input.description ?? existing?.description ?? ""),
         ],
       ],
-    },
-  ];
+    });
   if (tarotCropWrite)
     updates.push({
       range: `${q(IMAGE_SHEET)}!I${row}`,
       values: [[verifiedTarotCrop ? JSON.stringify(verifiedTarotCrop) : ""]],
     });
-  if (input.selected) {
+  if (tarotSelectionWrite) {
+    updates.push({ range: `${q(IMAGE_SHEET)}!J${row}`, values: [["Ja"]] });
+    for (const other of recipe.imageVariants)
+      if (other.id !== id && other.selectedTarot && other.rowNumber)
+        updates.push({
+          range: `${q(IMAGE_SHEET)}!J${other.rowNumber}`,
+          values: [["Nej"]],
+        });
+  }
+  if (pokerSelectionWrite) {
     for (const other of recipe.imageVariants)
       if (other.id !== id && other.selected && other.rowNumber)
         updates.push({
@@ -892,21 +960,31 @@ export async function saveImageVariant(auth, recipeId, input) {
   });
   const updatedVariants = recipe.imageVariants.map((variant) =>
     variant.id === id
-      ? { ...variants.find((v) => v.id === id), selected: selected.id === id }
-      : { ...variant, selected: variant.id === selected.id },
+      ? {
+          ...variants.find((v) => v.id === id),
+          selected: selected.id === id,
+          selectedTarot: selectedTarot?.id === id,
+        }
+      : {
+          ...variant,
+          selected: variant.id === selected.id,
+          selectedTarot: variant.id === selectedTarot?.id,
+        },
   );
   if (!existing)
     updatedVariants.push({
       ...variants.find((v) => v.id === id),
       selected: selected.id === id,
+      selectedTarot: selectedTarot?.id === id,
     });
   const updatedRecipe = {
     ...recipe,
     imageVariants: updatedVariants,
     selectedImageVariantId: selected.id,
+    selectedImageVariantIdTarot: selectedTarot?.id || "",
     imageId: selected.fileId,
     imageCrop: selected.crop,
-    imageCropTarot: selected.tarotCrop,
+    imageCropTarot: (selectedTarot || selected).tarotCrop,
     imageWidth: selected.width,
     imageHeight: selected.height,
   };

@@ -234,6 +234,7 @@ app.post(
       width: meta.width,
       height: meta.height,
       selected: true,
+      printProfile: { id: req.body.printProfile || "mpc-poker" },
       description: req.body.description || "",
     });
     imageCatalogCache = null;
@@ -259,13 +260,17 @@ async function exportRecipe(req) {
   );
   if (!selectedRecipe)
     throw Object.assign(new Error("Recept saknas."), { status: 404 });
-  recipe.imageId = selectedRecipe.imageId;
+  const selectedForFormat = recipeForProfile(
+    selectedRecipe,
+    recipe.printProfile,
+  );
+  recipe.imageId = selectedForFormat.imageId;
   recipe.imageCrop =
-    recipe.selectedImageVariantId === selectedRecipe.selectedImageVariantId
+    recipe.selectedImageVariantId === selectedForFormat.selectedImageVariantId
       ? recipe.imageCrop
-      : recipeForProfile(selectedRecipe, recipe.printProfile).imageCrop;
-  recipe.imageWidth = selectedRecipe.imageWidth;
-  recipe.imageHeight = selectedRecipe.imageHeight;
+      : selectedForFormat.imageCrop;
+  recipe.imageWidth = selectedForFormat.imageWidth;
+  recipe.imageHeight = selectedForFormat.imageHeight;
   const file = await findImageFile(auth, recipe);
   if (file) {
     const bytes = await cachedImage(file, async () => {

@@ -14,6 +14,16 @@ export const IMAGE_HEADERS = [
   "Beskrivning",
 ];
 export const TAROT_CROP_HEADER = "Beskärning tarot JSON";
+export const TAROT_SELECTED_HEADER = "Vald tarot";
+
+export function selectedVariantForProfile(recipe, profile) {
+  const variants = recipe?.imageVariants || [];
+  const id =
+    profile?.id === "mpc-tarot"
+      ? recipe.selectedImageVariantIdTarot || recipe.selectedImageVariantId
+      : recipe?.selectedImageVariantId;
+  return variants.find((variant) => variant.id === id) || variants[0] || null;
+}
 
 export function cropForProfile(variant, profile) {
   return profile?.id === "mpc-tarot"
@@ -23,12 +33,21 @@ export function cropForProfile(variant, profile) {
 
 export function recipeForProfile(recipe, profile) {
   if (!recipe) return recipe;
+  const variant = selectedVariantForProfile(recipe, profile);
+  const tarot = profile?.id === "mpc-tarot";
   return {
     ...recipe,
-    imageCrop:
-      profile?.id === "mpc-tarot"
-        ? (recipe.imageCropTarot ?? null)
-        : recipe.imageCrop,
+    imageId: variant?.fileId || recipe.imageId,
+    selectedImageVariantId: variant?.id || recipe.selectedImageVariantId,
+    imageWidth: variant?.width || recipe.imageWidth,
+    imageHeight: variant?.height || recipe.imageHeight,
+    imageCrop: tarot
+      ? (recipe.imageCropTarot ?? variant?.tarotCrop ?? null)
+      : recipe.imageCrop,
+    imageDataUrl:
+      recipe.loadedImageVariantId && recipe.loadedImageVariantId !== variant?.id
+        ? null
+        : recipe.imageDataUrl,
   };
 }
 
@@ -81,7 +100,8 @@ export function attachImageVariants(catalog, values = []) {
       JSON.stringify(values[0].slice(0, IMAGE_HEADERS.length)) !==
         JSON.stringify(IMAGE_HEADERS) ||
       (values[0].length > IMAGE_HEADERS.length &&
-        values[0][8] !== TAROT_CROP_HEADER)
+        values[0][8] !== TAROT_CROP_HEADER) ||
+      (values[0].length > 9 && values[0][9] !== TAROT_SELECTED_HEADER)
     )
       throw new Error(`${IMAGE_SHEET} har oväntade kolumner.`);
     values.slice(1).forEach((cells, index) => {
@@ -95,6 +115,7 @@ export function attachImageVariants(catalog, values = []) {
         cropJson,
         description,
         tarotCropJson,
+        selectedTarot,
       ] = cells;
       if (!recipeId || !id || !fileId) return;
       let crop = null;
@@ -121,6 +142,7 @@ export function attachImageVariants(catalog, values = []) {
         id,
         fileId: driveId(fileId),
         selected: selected === "Ja",
+        selectedTarot: selectedTarot === "Ja",
         width: Number(width) || 0,
         height: Number(height) || 0,
         crop,
@@ -150,13 +172,17 @@ export function attachImageVariants(catalog, values = []) {
       });
     if (variants.filter((x) => x.selected).length > 1)
       throw new Error(`Flera valda bilder för ${recipe.id}.`);
+    if (variants.filter((x) => x.selectedTarot).length > 1)
+      throw new Error(`Flera valda tarotbilder för ${recipe.id}.`);
     const selected = variants.find((x) => x.selected) || variants[0];
+    const tarotSelected = variants.find((x) => x.selectedTarot);
     recipe.imageVariants = variants;
     recipe.selectedImageVariantId = selected?.id || "";
+    recipe.selectedImageVariantIdTarot = tarotSelected?.id || "";
     if (selected) {
       recipe.imageId = selected.fileId;
       recipe.imageCrop = selected.crop;
-      recipe.imageCropTarot = selected.tarotCrop;
+      recipe.imageCropTarot = (tarotSelected || selected).tarotCrop;
       recipe.imageWidth = selected.width;
       recipe.imageHeight = selected.height;
     }

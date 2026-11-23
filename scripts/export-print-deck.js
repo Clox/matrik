@@ -246,6 +246,7 @@ const sourceFingerprint = (items) =>
           cardRecipe: r.cardRecipe,
           imageId: r.imageId,
           imageVariantId: r.selectedImageVariantId,
+          imageVariantIdTarot: r.selectedImageVariantIdTarot,
           imageCrop: r.imageCrop,
           imageCropTarot: r.imageCropTarot,
           ingredients: r.ingredients,

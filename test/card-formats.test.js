@@ -11,6 +11,7 @@ import {
 import {
   IMAGE_HEADERS,
   TAROT_CROP_HEADER,
+  TAROT_SELECTED_HEADER,
   attachImageVariants,
   recipeForProfile,
   updatedVariantCrops,
@@ -20,6 +21,47 @@ import { renderSvgPng } from "../server/render-card-png.js";
 
 const poker = PRINT_PROFILES[0];
 const tarot = PRINT_PROFILES[1];
+
+test("tarot kan välja en annan bild utan att ändra pokerbild eller pokerbeskärning", () => {
+  const recipe = { ...sample(), imageId: "poker-file" };
+  const pokerCrop = { x: 0, y: 0, width: 0.8, height: 0.8 };
+  const tarotCrop = { x: 0.1, y: 0.1, width: 0.75, height: 0.75 };
+  attachImageVariants({ recipes: [recipe] }, [
+    [...IMAGE_HEADERS, TAROT_CROP_HEADER, TAROT_SELECTED_HEADER],
+    [
+      recipe.id,
+      "poker",
+      "poker-file",
+      "Ja",
+      "2000",
+      "3000",
+      JSON.stringify(pokerCrop),
+      "",
+      "",
+      "Nej",
+    ],
+    [
+      recipe.id,
+      "tarot",
+      "tarot-file",
+      "Nej",
+      "1024",
+      "1536",
+      "",
+      "",
+      JSON.stringify(tarotCrop),
+      "Ja",
+    ],
+  ]);
+  const pokerCard = recipeForProfile(recipe, poker);
+  const tarotCard = recipeForProfile(recipe, tarot);
+  assert.equal(pokerCard.imageId, "poker-file");
+  assert.equal(tarotCard.imageId, "tarot-file");
+  assert.deepEqual(pokerCard.imageCrop, pokerCrop);
+  assert.deepEqual(tarotCard.imageCrop, tarotCrop);
+  assert.equal(recipe.imageId, "poker-file");
+  assert.deepEqual(recipe.imageCrop, pokerCrop);
+});
 const sample = () => ({
   id: "M777",
   name: "Provgryta med champinjoner",
@@ -100,40 +142,16 @@ test("poker- och tarotbeskärning läses från skilda Sheet-kolumner", () => {
   assert.deepEqual(recipe.imageCrop, pokerCrop);
 });
 
-test("tarotfoto-undantag är explicita och gäller inte poker eller ersatta bilder", () => {
+test("tarot kräver minst 300 äkta foto-ppi för alla bildvarianter", () => {
   const recipe = { id: "D003", selectedImageVariantId: "original" };
-  const accepted = photoQualityCheck(recipe, tarot, 1199, 1312, null);
-  assert.equal(accepted.exception, true);
-  assert.equal(accepted.possible, true);
-  assert.ok(accepted.ppi < 300 && accepted.ppi > 261);
-  assert.equal(
-    photoQualityCheck(recipe, poker, 1199, 1312, null).exception,
-    false,
-  );
-  assert.equal(
-    photoQualityCheck(recipe, tarot, 1200, 1312, null).exception,
-    false,
-  );
-  assert.equal(
-    photoQualityCheck(
-      { ...recipe, selectedImageVariantId: "replacement" },
-      tarot,
-      1199,
-      1312,
-      null,
-    ).exception,
-    false,
-  );
-  assert.equal(
-    photoQualityCheck(
-      { id: "M018", selectedImageVariantId: "original" },
-      tarot,
-      1063,
-      1480,
-      null,
-    ).possible,
-    true,
-  );
+  const tooSmall = photoQualityCheck(recipe, tarot, 1199, 1312, null);
+  assert.equal(tooSmall.exception, false);
+  assert.equal(tooSmall.possible, false);
+  assert.ok(tooSmall.ppi < 300);
+  const adequate = photoQualityCheck(recipe, tarot, 1024, 1536, null);
+  assert.equal(adequate.exception, false);
+  assert.equal(adequate.possible, true);
+  assert.ok(adequate.ppi >= 300);
 });
 
 test("byte av bild i tarotläge kan inte skriva om pokerbeskärningen", () => {
