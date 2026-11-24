@@ -163,9 +163,11 @@ for (const [index, sourceRecipe] of recipes.entries()) {
       throw new Error(`${recipe.id}: Fel exportmått eller DPI på ${side}.`);
     await fs.writeFile(target, png, { mode: 0o600 });
     if (side === "front") {
-      const { stdout } = await exec("zbarimg", ["--quiet", "--raw", target], {
-        maxBuffer: 1024 * 1024,
-      });
+      const { stdout } = await exec(
+        "zbarimg",
+        ["--quiet", "--raw", "-S*.enable=0", "-Sqrcode.enable=1", target],
+        { maxBuffer: 1024 * 1024 },
+      );
       if (stdout.trim() !== recipe.id)
         throw new Error(`${recipe.id}: QR-koden avkodas som ${stdout.trim()}.`);
     }
